@@ -26,7 +26,10 @@
       return {d: Date.parse(c.t.replace(" ", "T") + ":00Z") / 86400000,
               v: c.o, c: c.c, q: c.q, t: c.t.slice(0, 10)};
     });
-    var all = pts.concat(casts);
+    var mod = (data.model ? data.model.p : []).map(function (p) {
+      return {d: p[0], v: p[1], lo: p[2], hi: p[3], mo: 1};
+    });
+    var all = pts.concat(casts).concat(mod);
     if (!all.length) { host.innerHTML =
       "<div class='nochart'>No time series for this point</div>"; return null; }
     var d0 = Math.min.apply(null, all.map(function (a) { return a.d; }));
@@ -59,7 +62,9 @@
 
       var vis = all.filter(function (a) { return a.d >= x0 && a.d <= x1; });
       if (!vis.length) vis = all;
-      var vmax = Math.max.apply(null, vis.map(function (a) { return a.v; }));
+      var vmax = Math.max.apply(null, vis.map(function (a) {
+        return a.hi !== undefined ? Math.max(a.v, a.hi) : a.v;
+      }));
       var yMax = Math.max(vmax * 1.12, 1.6), yMin = 0;
       var X = function (d) {
         return ML + (d - x0) / (x1 - x0) * (W - ML - MR);
@@ -127,6 +132,25 @@
         seg.push(p);
       });
       flush();
+      // model band + dashed prediction line (never confusable with obs)
+      if (mod.length) {
+        var mvis = mod.filter(function (p) {
+          return p.d >= x0 && p.d <= x1;
+        });
+        if (mvis.length > 1) {
+          var up = mvis.map(function (p) {
+            return X(p.d) + "," + Y(Math.min(p.hi, yMax));
+          });
+          var dn = mvis.slice().reverse().map(function (p) {
+            return X(p.d) + "," + Y(Math.max(p.lo, yMin));
+          });
+          el("polygon", {points: up.concat(dn).join(" "),
+            "class": "cmband"});
+          el("polyline", {fill: "none", points: mvis.map(function (p) {
+            return X(p.d) + "," + Y(p.v);
+          }).join(" "), "class": "cmline"});
+        }
+      }
       // cast dots
       casts.forEach(function (c) {
         if (c.d < x0 || c.d > x1) return;
@@ -150,9 +174,10 @@
       } else {
         el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
           "class": "clab cend cmut"})
-          .textContent = data.series
+          .textContent = (data.series
             ? (data.series.k === "w" ? "weekly means" : "daily values")
-            : "individual casts";
+            : "individual casts") +
+            (data.model ? " \u00b7 modeled (dashed + band)" : "");
       }
       el("text", {x: W - MR, y: H - 7, "text-anchor": "end",
         "class": "clab cmut"})
@@ -196,8 +221,11 @@
         focus.setAttribute("cy", Y(Math.min(n.v, yMax)));
         focus.classList.remove("hiddenattr");
         tip.innerHTML = "<b>" + (n.t || fmtDate(n.d)) + "</b> \u00b7 " +
-          n.v.toFixed(2) + " mL/L" +
-          (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : "");
+          (n.mo
+            ? "modeled " + n.v.toFixed(2) + " (" + n.lo.toFixed(2) +
+              "\u2013" + n.hi.toFixed(2) + ") mL/L"
+            : n.v.toFixed(2) + " mL/L" +
+              (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : ""));
         tip.classList.remove("hidden");
         var hr = host.getBoundingClientRect();
         var tx = (ev.clientX - hr.left) + 14;
@@ -299,7 +327,9 @@
       var series = VI.series[key] || null;
       var siteCasts = VI.casts.filter(function (c) { return c.s === key; });
       H.chart = IChart(dChart,
-        {series: series, casts: siteCasts, lens: lensName()},
+        {series: series, casts: siteCasts,
+         model: (VI.modelSeries || {})[key] || null,
+         lens: lensName()},
         VI.colors, VI.thresholds);
     }
     function openDetail(html, chartKey, hash, latlng) {

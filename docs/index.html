@@ -6,7 +6,7 @@
 <title>Vancouver Island near-bottom oxygen</title>
 <link rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
-<link rel="stylesheet" href="assets/style.css?v=f6f8f90e">
+<link rel="stylesheet" href="assets/style.css?v=0a783f6f">
 </head>
 <body>
 <button id="sb-toggle" aria-label="Toggle sidebar">&#9776;</button>
@@ -18,7 +18,7 @@
         title="Light / dark mode">&#9789;</button>
     </div>
     <p class="sub">43 sites &#183; 17612 casts &#183;
-      built 2026-08-28 05:41 UTC</p>
+      built 2026-08-28 17:16 UTC</p>
   </header>
   <section>
     <input id="search" list="site-list" placeholder="Find a site&#8230;"
@@ -90,7 +90,7 @@ statistics; untick to hide them from the map too.">
           </button>
         </div>
       </div>
-      
+      <label><input type="checkbox" id="ck-model"> Modeled predictions</label>
     </div>
   </section>
   <section>
@@ -114,7 +114,7 @@ statistics; untick to hide them from the map too.">
       <div class="chips"><button class="chip" data-class="good" aria-pressed="true"><span class="sw" style="background:#2f9e44"></span><span class="chip-name">Good</span><span class="chip-rng">&#8805; 2.8 mL/L</span></button><button class="chip" data-class="at_risk" aria-pressed="true"><span class="sw" style="background:#f59f00"></span><span class="chip-name">At risk</span><span class="chip-rng">1.4 &#8211; 2.8</span></button><button class="chip" data-class="hypoxic" aria-pressed="true"><span class="sw" style="background:#e03131"></span><span class="chip-name">Hypoxic</span><span class="chip-rng">0.1 &#8211; 1.4</span></button><button class="chip" data-class="anoxic" aria-pressed="true"><span class="sw" style="background:#5f3dc4"></span><span class="chip-name">Anoxic</span><span class="chip-rng">&lt; 0.1</span></button><button class="chip" data-class="unclassified" aria-pressed="true"><span class="sw" style="background:#868e96"></span><span class="chip-name">Unclassified</span><span class="chip-rng">no data</span></button></div>
       <div class="lhead">What the markers mean</div>
       <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" stroke="#333" stroke-width="2.5"/></svg><div class="lg-t">Continuous sensor site<div class="lg-sub">records every day</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="5.5" fill="#9db8c9" stroke="#fff" stroke-width="1.6"/></svg><div class="lg-t">Ship-visit station<div class="lg-sub">sampled a few times a year</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="3.2" fill="#9db8c9" stroke="#fff" stroke-width="1"/></svg><div class="lg-t">One CTD cast<div class="lg-sub">colored by its own value</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="3.4" fill="none" stroke="#868e96" stroke-width="1.6"/></svg><div class="lg-t">QC-flagged cast<div class="lg-sub">implausible reading, kept out of stats</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" stroke="#333" stroke-width="2.5" stroke-dasharray="4 3"/></svg><div class="lg-t">Dashed = record ended</div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" opacity=".4" stroke="#333" stroke-width="2"/></svg><div class="lg-t">Faded = lower confidence</div></div>
-      <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><line x1="3" y1="13" x2="23" y2="13" stroke="#4292c6" stroke-width="2"/></svg><div class="lg-t">GEBCO isobath<div class="lg-sub">depth contours, 100&#8211;2000 m</div></div></div>
+      <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><polygon points="13,4 22,13 13,22 4,13" fill="none" stroke="#495057" stroke-width="2.4"/></svg><div class="lg-t">Modeled prediction<div class="lg-sub">hollow diamond &#8212; never an observation</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><line x1="3" y1="13" x2="23" y2="13" stroke="#4292c6" stroke-width="2"/></svg><div class="lg-t">GEBCO isobath<div class="lg-sub">depth contours, 100&#8211;2000 m</div></div></div>
       <div class="lfoot">Click any marker to open its stats and full time
         series below the map.</div>
     </div>
@@ -129,7 +129,7 @@ statistics; untick to hide them from the map too.">
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
 </script>
-<script src="assets/data.js?v=6fff8948"></script>
-<script src="assets/app.js?v=10adf8ec"></script>
+<script src="assets/data.js?v=dc5d0322"></script>
+<script src="assets/app.js?v=ebeb2f4a"></script>
 </body>
 </html>

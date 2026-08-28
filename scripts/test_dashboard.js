@@ -244,9 +244,30 @@ setTimeout(() => {
   if (VI.model) {
     const m = doc.getElementById("ck-model");
     m.checked = true; fire(m, "change");
-    check("model markers",
+    check("model diamond markers",
       doc.querySelectorAll("#map .leaflet-marker-pane svg polygon").length,
       VI.model.length);
+    check("model series shipped",
+      Object.keys(VI.modelSeries).length, VI.model.length);
+    // open a modeled site: chart must show band + dashed line + caption
+    const mc = VI.model[0].key;
+    const si = doc.getElementById("search");
+    si.value = mc + " - x"; fire(si, "change");
+    check("modeled site chart has uncertainty band",
+      doc.querySelector("#d-chart .cmband") !== null, true);
+    check("modeled site chart has dashed prediction line",
+      doc.querySelector("#d-chart .cmline") !== null, true);
+    check("chart caption flags the model",
+      Array.from(doc.querySelectorAll("#d-chart svg text"))
+        .some(t => t.textContent.includes("modeled")), true);
+    const cap2 = doc.querySelector(
+      '#d-chart svg.ichart rect[fill="transparent"]');
+    cap2.dispatchEvent(new w.MouseEvent("mousemove",
+      {clientX: 640, clientY: 200, bubbles: true}));
+    check("hovering a prediction says 'modeled' with its band",
+      doc.querySelector("#d-chart .ctip").innerHTML.includes("modeled"),
+      true);
+    doc.getElementById("d-close").click();
   } else console.log("  -- no model in data.js " +
     "(add model_predictions.csv to test)");
 

@@ -132,6 +132,10 @@ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .clab.red{fill:#e03131}.clab.amber{fill:#f59f00}
 .cend{text-anchor:end}.cmid{text-anchor:middle}.cmut{opacity:.75}
 .creset{fill:var(--accent);cursor:pointer;font-weight:700}
+.cmband{fill:#495057;opacity:.15;stroke:none}
+html[data-theme=dark] .cmband{fill:#b7cbdb;opacity:.18}
+.cmline{stroke:#495057;stroke-width:1.8;stroke-dasharray:6 4}
+html[data-theme=dark] .cmline{stroke:#c6d8e6}
 .ccross{stroke:var(--mut);stroke-width:1;stroke-dasharray:3 3}
 .cfocus{fill:none;stroke:var(--accent);stroke-width:2}
 .cbrush{fill:var(--accent);opacity:.16}

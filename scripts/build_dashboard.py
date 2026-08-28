@@ -159,46 +159,77 @@ def series_records(cls, daily) -> dict:
     return out
 
 
+def model_series_records(model: pd.DataFrame | None) -> dict:
+    """Weekly-mean predicted series per site for the dock chart:
+    {code: {v: version, p: [[days_epoch, pred, lo, hi], ...]}}"""
+    if model is None or "site_code" not in model.columns:
+        return {}
+    out = {}
+    epoch = pd.Timestamp("1970-01-01")
+    m = model[model["site_code"].notna()].copy()
+    m["date"] = pd.to_datetime(m["date"], utc=True).dt.tz_localize(None)
+    for code, g in m.groupby("site_code"):
+        w = (g.set_index("date")[["o2_pred_ml_l", "o2_lo", "o2_hi"]]
+             .resample("W").mean().dropna())
+        out[code] = {
+            "v": str(g["model_version"].iloc[0]),
+            "p": [[int((t - epoch).days), round(r.o2_pred_ml_l, 2),
+                   round(r.o2_lo, 2), round(r.o2_hi, 2)]
+                  for t, r in w.iterrows()],
+        }
+    return out
+
+
 def model_records(model: pd.DataFrame | None, cls: pd.DataFrame,
-                  charts: dict) -> list[dict]:
-    if model is None:
+                  mseries: dict) -> list[dict]:
+    """Hollow-diamond map markers, one per modeled site."""
+    if model is None or not mseries:
         return []
     out = []
     coords = cls.set_index("site_code")[["lat", "lon", "site_name"]]
-    if "site_code" in model.columns:
-        for code, grp in model[model["site_code"].notna()].groupby("site_code"):
-            if code not in coords.index:
-                continue
-            lat, lon, name = coords.loc[code]
-            cv = core.class_of(grp["o2_pred_ml_l"].quantile(.1))
-            out.append({"lat": round(float(lat), 5),
-                        "lon": round(float(lon), 5), "cls": cv,
-                        "tip": (f"{name} - MODELED "
-                                f"({grp['model_version'].iloc[0]}) - "
-                                f"{core.LABELS[cv]} (pred p10)"),
-                        "detail": core.model_popup(
-                            name, f"({code}) - modeled", grp,
-                            f"{code}::model", charts),
-                        "key": f"{code}::model"})
-    if {"lat", "lon"}.issubset(model.columns):
-        sp = model[model["lat"].notna() & model["lon"].notna()]
-        if "site_code" in sp.columns:
-            sp = sp[sp["site_code"].isna()]
-        sp = sp[sp["lat"].between(core.BOX["s"], core.BOX["n"])
-                & sp["lon"].between(core.BOX["w"], core.BOX["e"])]
-        for (lat, lon), grp in sp.groupby(["lat", "lon"]):
-            key = f"model@{lat:.4f},{lon:.4f}"
-            charts.setdefault(key, core.chart_svg(model_site=grp) or "")
-            cv = core.class_of(grp["o2_pred_ml_l"].quantile(.1))
-            out.append({"lat": round(float(lat), 5),
-                        "lon": round(float(lon), 5), "cls": cv, "small": 1,
-                        "tip": (f"MODELED grid point "
-                                f"({grp['model_version'].iloc[0]}) - "
-                                f"{core.LABELS[cv]} (pred p10)"),
-                        "detail": core.model_popup(
-                            f"{lat:.3f}N, {abs(lon):.3f}W",
-                            "- modeled grid point", grp, key, charts),
-                        "key": key})
+    m = model[model["site_code"].notna()].copy()
+    for code, g in m.groupby("site_code"):
+        if code not in coords.index:
+            continue
+        lat, lon, name = coords.loc[code]
+        pred = g["o2_pred_ml_l"]
+        p10, med = pred.quantile(.1), pred.median()
+        cv = core.class_of(p10)
+        pct14 = (pred < 1.4).mean() * 100
+        span = (f"{pd.to_datetime(g['date'].min(), utc=True):%Y-%m}"
+                f"&#8211;{pd.to_datetime(g['date'].max(), utc=True):%Y-%m}")
+        ver = str(g["model_version"].iloc[0])
+        detail = (
+            f'<div class="i-h">{name}</div>'
+            f'<div class="i-subh">{code} &#183; <b>MODELED</b> &#183; '
+            f'{ver}</div>'
+            '<div class="i-sec"><div class="i-lab">Predicted status</div>'
+            '<div class="i-pills">' + _pill("Typical low (pred p10)", cv)
+            + "</div></div>"
+            '<div class="i-sec"><div class="i-lab">Predicted oxygen '
+            "(mL/L)</div>"
+            '<div class="i-stats">'
+            f'<div class="i-st"><b>{p10:.2f}</b><span>p10</span></div>'
+            f'<div class="i-st"><b>{med:.2f}</b><span>median</span></div>'
+            f'<div class="i-st"><b>{pct14:.0f}%</b><span>&lt;1.4</span>'
+            "</div></div></div>"
+            '<div class="i-sec"><div class="i-lab">Prediction record</div>'
+            f'<div class="i-row">{span} &#183; daily &#183; '
+            f'{len(g):,} predictions</div></div>'
+            '<div class="i-note info">Every value here is a <b>model '
+            "prediction</b>, never an observation. The chart shows the "
+            "prediction as a dashed line with its uncertainty band, over "
+            "the station's real casts.</div>")
+        out.append({"lat": round(float(lat), 5),
+                    "lon": round(float(lon), 5), "cls": cv,
+                    "tip": ("<div class='tt-h'>" + str(name) +
+                            " <span class='tt-b'>MODELED</span></div>"
+                            "<div class='tt-r'><span class='tt-dot' "
+                            "style='background:" + core.COLORS[cv] +
+                            "'></span>" + core.LABELS[cv] +
+                            " <span class='tt-mut'>(pred p10 &#183; " +
+                            ver + ")</span></div>"),
+                    "detail": detail, "key": code})
     return out
 
 
@@ -560,6 +591,10 @@ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .clab.red{fill:#e03131}.clab.amber{fill:#f59f00}
 .cend{text-anchor:end}.cmid{text-anchor:middle}.cmut{opacity:.75}
 .creset{fill:var(--accent);cursor:pointer;font-weight:700}
+.cmband{fill:#495057;opacity:.15;stroke:none}
+html[data-theme=dark] .cmband{fill:#b7cbdb;opacity:.18}
+.cmline{stroke:#495057;stroke-width:1.8;stroke-dasharray:6 4}
+html[data-theme=dark] .cmline{stroke:#c6d8e6}
 .ccross{stroke:var(--mut);stroke-width:1;stroke-dasharray:3 3}
 .cfocus{fill:none;stroke:var(--accent);stroke-width:2}
 .cbrush{fill:var(--accent);opacity:.16}
@@ -661,7 +696,10 @@ APP_JS = r"""(function () {
       return {d: Date.parse(c.t.replace(" ", "T") + ":00Z") / 86400000,
               v: c.o, c: c.c, q: c.q, t: c.t.slice(0, 10)};
     });
-    var all = pts.concat(casts);
+    var mod = (data.model ? data.model.p : []).map(function (p) {
+      return {d: p[0], v: p[1], lo: p[2], hi: p[3], mo: 1};
+    });
+    var all = pts.concat(casts).concat(mod);
     if (!all.length) { host.innerHTML =
       "<div class='nochart'>No time series for this point</div>"; return null; }
     var d0 = Math.min.apply(null, all.map(function (a) { return a.d; }));
@@ -694,7 +732,9 @@ APP_JS = r"""(function () {
 
       var vis = all.filter(function (a) { return a.d >= x0 && a.d <= x1; });
       if (!vis.length) vis = all;
-      var vmax = Math.max.apply(null, vis.map(function (a) { return a.v; }));
+      var vmax = Math.max.apply(null, vis.map(function (a) {
+        return a.hi !== undefined ? Math.max(a.v, a.hi) : a.v;
+      }));
       var yMax = Math.max(vmax * 1.12, 1.6), yMin = 0;
       var X = function (d) {
         return ML + (d - x0) / (x1 - x0) * (W - ML - MR);
@@ -762,6 +802,25 @@ APP_JS = r"""(function () {
         seg.push(p);
       });
       flush();
+      // model band + dashed prediction line (never confusable with obs)
+      if (mod.length) {
+        var mvis = mod.filter(function (p) {
+          return p.d >= x0 && p.d <= x1;
+        });
+        if (mvis.length > 1) {
+          var up = mvis.map(function (p) {
+            return X(p.d) + "," + Y(Math.min(p.hi, yMax));
+          });
+          var dn = mvis.slice().reverse().map(function (p) {
+            return X(p.d) + "," + Y(Math.max(p.lo, yMin));
+          });
+          el("polygon", {points: up.concat(dn).join(" "),
+            "class": "cmband"});
+          el("polyline", {fill: "none", points: mvis.map(function (p) {
+            return X(p.d) + "," + Y(p.v);
+          }).join(" "), "class": "cmline"});
+        }
+      }
       // cast dots
       casts.forEach(function (c) {
         if (c.d < x0 || c.d > x1) return;
@@ -785,9 +844,10 @@ APP_JS = r"""(function () {
       } else {
         el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
           "class": "clab cend cmut"})
-          .textContent = data.series
+          .textContent = (data.series
             ? (data.series.k === "w" ? "weekly means" : "daily values")
-            : "individual casts";
+            : "individual casts") +
+            (data.model ? " \u00b7 modeled (dashed + band)" : "");
       }
       el("text", {x: W - MR, y: H - 7, "text-anchor": "end",
         "class": "clab cmut"})
@@ -831,8 +891,11 @@ APP_JS = r"""(function () {
         focus.setAttribute("cy", Y(Math.min(n.v, yMax)));
         focus.classList.remove("hiddenattr");
         tip.innerHTML = "<b>" + (n.t || fmtDate(n.d)) + "</b> \u00b7 " +
-          n.v.toFixed(2) + " mL/L" +
-          (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : "");
+          (n.mo
+            ? "modeled " + n.v.toFixed(2) + " (" + n.lo.toFixed(2) +
+              "\u2013" + n.hi.toFixed(2) + ") mL/L"
+            : n.v.toFixed(2) + " mL/L" +
+              (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : ""));
         tip.classList.remove("hidden");
         var hr = host.getBoundingClientRect();
         var tx = (ev.clientX - hr.left) + 14;
@@ -934,7 +997,9 @@ APP_JS = r"""(function () {
       var series = VI.series[key] || null;
       var siteCasts = VI.casts.filter(function (c) { return c.s === key; });
       H.chart = IChart(dChart,
-        {series: series, casts: siteCasts, lens: lensName()},
+        {series: series, casts: siteCasts,
+         model: (VI.modelSeries || {})[key] || null,
+         lens: lensName()},
         VI.colors, VI.thresholds);
     }
     function openDetail(html, chartKey, hash, latlng) {
@@ -1308,7 +1373,8 @@ def main() -> int:
     sites = site_records(cls, casts)
     series = series_records(cls, daily)
     casts_rec = cast_records(casts)
-    model_rec = model_records(model, cls, charts)
+    mseries = model_series_records(model)
+    model_rec = model_records(model, cls, mseries)
     bathy_path = core.find_bathy(d)
     bathy = core.bathy_multilines(bathy_path) if bathy_path else None
     relief = None
@@ -1332,14 +1398,15 @@ def main() -> int:
         "lensNames": {k: lbl for k, lbl, _, _ in LENSES},
         "sites": sites, "casts": casts_rec, "series": series,
         "thresholds": [1.4, 2.8],
-        "model": model_rec or None, "bathy": bathy, "relief": relief,
+        "model": model_rec or None, "modelSeries": mseries or None,
+        "bathy": bathy, "relief": relief,
     }
     write_assets(vi)
     size = sum(p.stat().st_size for p in OUT_DIR.rglob("*") if p.is_file())
     print(f"wrote {OUT_DIR}/ ({size / 1e6:.1f} MB): index.html + assets "
           f"({len(sites)} sites, {len(casts_rec):,} casts, "
           f"{len(series)} series"
-          + (f", {len(model_rec)} model markers" if model_rec else "")
+          + (f", {len(model_rec)} modeled sites" if model_rec else "")
           + (f", {sum(len(b['lines']) for b in bathy)} isobath segments"
              if bathy else "") + ")")
     return 0
