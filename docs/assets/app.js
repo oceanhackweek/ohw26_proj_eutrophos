@@ -228,14 +228,15 @@
         var r = svg.getBoundingClientRect();
         return (ev.clientX - r.left) * (W / (r.width || W));
       }
-      cap.addEventListener("mousemove", function (ev) {
-        var px = pxOf(ev);
-        if (brushA !== null) {
-          var a = Math.min(brushA, px), b = Math.max(brushA, px);
-          brush.setAttribute("x", a);
-          brush.setAttribute("width", b - a);
-          brush.classList.remove("hiddenattr");
-        }
+      function updateBrush(px) {
+        var a = Math.min(brushA, px), b = Math.max(brushA, px);
+        brush.setAttribute("x", a);
+        brush.setAttribute("width", b - a);
+        brush.classList.remove("hiddenattr");
+      }
+      function showReadout(clientX, clientY) {
+        var px = (clientX - svg.getBoundingClientRect().left) *
+          (W / (svg.getBoundingClientRect().width || W));
         var n = nearest(IX(px));
         if (!n) return;
         cross.setAttribute("x1", X(n.d));
@@ -254,11 +255,15 @@
         var hr = host.getBoundingClientRect();
         var hw = hr.width || W, hh = hr.height || H;
         var tw = tip.offsetWidth || 190, th = tip.offsetHeight || 30;
-        var cx2 = ev.clientX - hr.left, cy2 = ev.clientY - hr.top;
+        var cx2 = clientX - hr.left, cy2 = clientY - hr.top;
         var tx = cx2 + tw + 22 > hw ? cx2 - tw - 14 : cx2 + 14;
         tip.style.left = Math.max(4, Math.min(tx, hw - tw - 4)) + "px";
         tip.style.top = Math.max(4,
           Math.min(cy2 - th - 6, hh - th - 4)) + "px";
+      }
+      cap.addEventListener("mousemove", function (ev) {
+        if (brushA !== null) updateBrush(pxOf(ev));
+        showReadout(ev.clientX, ev.clientY);
       });
       cap.addEventListener("mouseleave", function () {
         cross.classList.add("hiddenattr");
@@ -280,6 +285,47 @@
       });
       cap.addEventListener("dblclick", function () {
         x0 = d0; x1 = d1; render();
+      });
+      // touch: tap = readout, horizontal drag = zoom, double-tap = reset
+      var tStart = null, tLast = 0, tMoved = false, lastTap = 0;
+      cap.addEventListener("touchstart", function (ev) {
+        var t = ev.touches[0];
+        tStart = pxOf(t);
+        tLast = tStart;
+        tMoved = false;
+        brushA = null;
+        showReadout(t.clientX, t.clientY);
+      }, {passive: true});
+      cap.addEventListener("touchmove", function (ev) {
+        var t = ev.touches[0];
+        var px = pxOf(t);
+        tLast = px;
+        if (Math.abs(px - tStart) > 8) {
+          tMoved = true;
+          if (brushA === null) brushA = tStart;
+          updateBrush(px);
+          ev.preventDefault();          // horizontal drag zooms the chart
+        } else if (!tMoved) {
+          showReadout(t.clientX, t.clientY);
+        }
+      }, {passive: false});
+      cap.addEventListener("touchend", function () {
+        if (tMoved && brushA !== null) {
+          var a = Math.min(brushA, tLast), b = Math.max(brushA, tLast);
+          brushA = null;
+          if (b - a > 6) { x0 = IX(a); x1 = IX(b); render(); return; }
+          brush.classList.add("hiddenattr");
+        } else {
+          var now = Date.now();
+          if (now - lastTap < 350) { x0 = d0; x1 = d1; render(); return; }
+          lastTap = now;
+          setTimeout(function () {
+            cross.classList.add("hiddenattr");
+            focus.classList.add("hiddenattr");
+            tip.classList.add("hidden");
+          }, 2500);
+        }
+        brushA = null;
       });
     }
     render();
@@ -446,6 +492,9 @@
     var castLayer = L.layerGroup().addTo(map);
     var castOn = true;
     var castCanvas = L.canvas({padding: 0.4});
+    var COARSE = !!(window.matchMedia &&
+      window.matchMedia("(pointer: coarse)").matches);
+    var CR = COARSE ? 5 : 3;             // cast dot radius: touch vs mouse
     // DFO casts render as small squares on the shared canvas
     L.Canvas.include({
       _updateSquareMarker: function (layer) {
@@ -465,9 +514,9 @@
     var castMarkers = VI.casts.map(function (c) {
       var Ctor = c.f ? SquareMarker : L.circleMarker;
       var mk = new (c.f ? SquareMarker : L.CircleMarker)([c.la, c.lo], c.q
-        ? {radius: 3, color: "#868e96", weight: 1.4, fill: false,
+        ? {radius: CR, color: "#868e96", weight: 1.4, fill: false,
            renderer: castCanvas}
-        : {radius: 3, color: "#ffffff", weight: 0.8, fill: true,
+        : {radius: CR, color: "#ffffff", weight: 0.8, fill: true,
            fillColor: VI.colors[c.c], fillOpacity: 0.95,
            renderer: castCanvas});
       mk.bindTooltip(

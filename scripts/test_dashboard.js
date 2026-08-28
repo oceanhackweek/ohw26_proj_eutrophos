@@ -56,6 +56,8 @@ setTimeout(() => {
     el.dispatchEvent(new w.Event(type, { bubbles: true }));
 
   check("site markers on boot", counts().sites, VI.sites.length);
+  check("dashed study-box border removed",
+    doc.querySelector('#map path[stroke="#557"]'), null);
   check("cast years start at DFO era", VI.meta.cast_years[0], 2006);
   {
     const g = {};
@@ -125,6 +127,11 @@ setTimeout(() => {
   check("hover shows a value readout",
     !tipEl.classList.contains("hidden") &&
     tipEl.innerHTML.includes("mL/L"), true);
+  cap.dispatchEvent(new w.MouseEvent("mousemove",
+    {clientX: 1190, clientY: 200, bubbles: true}));
+  check("tooltip flips inside the chart at the right edge",
+    parseFloat(tipEl.style.left) < 1020 &&
+    parseFloat(tipEl.style.left) >= 4, true);
   // drag-zoom
   const fullSpan = A.chart.getFull()[1] - A.chart.getFull()[0];
   cap.dispatchEvent(new w.MouseEvent("mousedown",
@@ -140,6 +147,35 @@ setTimeout(() => {
   check("double-click resets zoom",
     Math.round(A.chart.getDomain()[1] - A.chart.getDomain()[0]),
     Math.round(fullSpan));
+  // touch gestures: tap readout, drag-zoom, double-tap reset
+  cap = doc.querySelector('#d-chart svg.ichart rect[fill="transparent"]');
+  const touch = (type, x) => {
+    const ev = new w.Event(type, {bubbles: true, cancelable: true});
+    ev.touches = [{clientX: x, clientY: 200}];
+    cap.dispatchEvent(ev);
+  };
+  touch("touchstart", 500);
+  check("tap shows a readout",
+    !doc.querySelector("#d-chart .ctip").classList.contains("hidden"),
+    true);
+  touch("touchmove", 760);
+  touch("touchend", 760);
+  check("touch drag zooms",
+    A.chart.getDomain()[1] - A.chart.getDomain()[0] < fullSpan * 0.6,
+    true);
+  cap = doc.querySelector('#d-chart svg.ichart rect[fill="transparent"]');
+  touch("touchstart", 400); touch("touchend", 400);
+  touch("touchstart", 402); touch("touchend", 402);
+  check("double-tap resets",
+    Math.round(A.chart.getDomain()[1] - A.chart.getDomain()[0]),
+    Math.round(fullSpan));
+  check("mobile CSS shipped (dvh, zoom clearance, 16px inputs, coarse dots)",
+    (() => { const css = fs.readFileSync("docs/assets/style.css", "utf8");
+      const js = fs.readFileSync("docs/assets/app.js", "utf8");
+      return css.includes("56dvh") &&
+        css.includes(".leaflet-control-zoom{margin-top:56px}") &&
+        css.includes("font-size:16px") &&
+        js.includes("pointer: coarse"); })(), true);
   doc.getElementById("d-close").click();
   check("close clears detail-open",
     doc.body.classList.contains("detail-open"), false);
@@ -212,16 +248,28 @@ setTimeout(() => {
   check("cast layer (ONC + DFO)", counts().casts, VI.casts.length);
   check("DFO casts present",
     VI.casts.filter(c => c.f).length > 10000, true);
+  const nONC = VI.casts.filter(c => !c.f).length;
+  const nDFO = VI.casts.filter(c => c.f).length;
+  const srcD = doc.getElementById("ck-src-dfo");
+  srcD.checked = false; fire(srcD, "change");
+  check("source toggle: ONC only", counts().casts, nONC);
+  const srcO = doc.getElementById("ck-src-onc");
+  srcO.checked = false; fire(srcO, "change");
+  check("source toggle: none", counts().casts, 0);
+  srcD.checked = true; fire(srcD, "change");
+  check("source toggle: DFO only", counts().casts, nDFO);
+  srcO.checked = true; fire(srcO, "change");
+  check("source toggles restore all", counts().casts, VI.casts.length);
   doc.getElementById("yr0").value = String(VI.meta.cast_years[1]);
   fire(doc.getElementById("yr0"), "change");
   const f1 = { y0: VI.meta.cast_years[1], y1: VI.meta.cast_years[1],
-    suspect: true };
+    suspect: true, onc: true, dfo: true };
   check("year filter", counts().casts,
     VI.casts.filter(c => A.castVisible(c, f1, ALL)).length);
   // presets
   doc.querySelector('.preset[data-span="5"]').click();
   const p5 = { y0: VI.meta.cast_years[1] - 4, y1: VI.meta.cast_years[1],
-    suspect: false };
+    suspect: false, onc: true, dfo: true };
   check("preset 'Last 5 yrs'", counts().casts,
     VI.casts.filter(c => A.castVisible(c, {...p5, suspect: true}, ALL))
       .length);
