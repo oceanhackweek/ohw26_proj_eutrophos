@@ -19,6 +19,3 @@ contributor_folders/*/data/onc_cache/
 __pycache__/
 *.pyc
 node_modules/
-
-# Files
-data/derived/model_predictions.csv
