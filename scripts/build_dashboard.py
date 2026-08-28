@@ -169,6 +169,18 @@ def index_html(vi: dict) -> str:
         f'<label><input type="checkbox" name="conf" value="{c}" checked> '
         f'{c.capitalize()}</label>' for c in ["high", "medium", "low"])
     y0, y1 = vi["meta"]["cast_years"]
+    G = "#9db8c9"
+    def _g(svg, name, sub=""):
+        sub = f'<div class="lg-sub">{sub}</div>' if sub else ""
+        return (f'<div class="lg-row"><svg class="lg-g" width="26" '
+                f'height="26" viewBox="0 0 26 26">{svg}</svg>'
+                f'<div class="lg-t">{name}{sub}</div></div>')
+    year_opts0 = "".join(
+        f'<option value="{y}"{" selected" if y == y0 else ""}>{y}</option>'
+        for y in range(y0, y1 + 1))
+    year_opts1 = "".join(
+        f'<option value="{y}"{" selected" if y == y1 else ""}>{y}</option>'
+        for y in range(y0, y1 + 1))
     relief_ctl = ('<label title="Hillshaded GEBCO grid drawn over the '
                   'basemap"><input type="checkbox" id="ck-relief" checked> '
                   'GEBCO shaded relief</label>' if vi.get("relief") else "")
@@ -177,19 +189,43 @@ def index_html(vi: dict) -> str:
                  if vi.get("bathy") else "")
     model_ctl = ('<label><input type="checkbox" id="ck-model"> '
                  'Modeled predictions</label>' if vi.get("model") else "")
-    model_leg = ('<div class="lrow"><span class="sw-diamond">&#9671;</span> '
-                 'hollow diamond = <b>modeled</b>, never an observation</div>'
+    model_leg = (_g('<polygon points="13,4 22,13 13,22 4,13" fill="none" '
+                    'stroke="#495057" stroke-width="2.4"/>',
+                    "Modeled prediction",
+                    "hollow diamond &#8212; never an observation")
                  if vi.get("model") else "")
-    bathy_leg = ('<div class="lrow"><span class="sw-line"></span> thin blue '
-                 'lines = GEBCO isobaths</div>' if vi.get("bathy") else "")
+    bathy_leg = (_g('<line x1="3" y1="13" x2="23" y2="13" stroke="#4292c6" '
+                    'stroke-width="2"/>', "GEBCO isobath",
+                    "depth contours, 100&#8211;2000 m")
+                 if vi.get("bathy") else "")
     chips = "".join(
-        f'<button class="chip" data-class="{c}" aria-pressed="true" '
-        f'title="Click to hide/show {core.LABELS[c].lower()} points">'
+        f'<button class="chip" data-class="{c}" aria-pressed="true">'
         f'<span class="sw" style="background:{core.COLORS[c]}"></span>'
-        f'{core.LABELS[c]}{thr}</button>' for c, thr in
-        [("good", " &#8805;2.8"), ("at_risk", " &lt;2.8"),
-         ("hypoxic", " &lt;1.4"), ("anoxic", " &lt;0.1"),
-         ("unclassified", "")])
+        f'<span class="chip-name">{core.LABELS[c]}</span>'
+        f'<span class="chip-rng">{rng}</span></button>' for c, rng in
+        [("good", "&#8805; 2.8 mL/L"), ("at_risk", "1.4 &#8211; 2.8"),
+         ("hypoxic", "0.1 &#8211; 1.4"), ("anoxic", "&lt; 0.1"),
+         ("unclassified", "no data")])
+    glyph_rows = "".join([
+        _g(f'<circle cx="13" cy="13" r="8" fill="{G}" stroke="#333" '
+           f'stroke-width="2.5"/>', "Continuous sensor site",
+           "records every day"),
+        _g(f'<circle cx="13" cy="13" r="5.5" fill="{G}" stroke="#fff" '
+           f'stroke-width="1.6"/>', "Ship-visit station",
+           "sampled a few times a year"),
+        _g(f'<circle cx="13" cy="13" r="3.2" fill="{G}" stroke="#fff" '
+           f'stroke-width="1"/>', "One CTD cast",
+           "colored by its own value"),
+        _g('<circle cx="13" cy="13" r="3.4" fill="none" stroke="#868e96" '
+           'stroke-width="1.6"/>', "QC-flagged cast",
+           "implausible reading, kept out of stats"),
+        _g(f'<circle cx="13" cy="13" r="8" fill="{G}" stroke="#333" '
+           f'stroke-width="2.5" stroke-dasharray="4 3"/>',
+           "Dashed = record ended"),
+        _g(f'<circle cx="13" cy="13" r="8" fill="{G}" opacity=".4" '
+           f'stroke="#333" stroke-width="2"/>',
+           "Faded = lower confidence"),
+    ])
     opts = "".join(f'<option value="{s["code"]} - {s["name"]}">'
                    for s in vi["sites"])
     m = vi["meta"]
@@ -257,15 +293,29 @@ chosen three-month season." class="lseason">
     <div class="stack">
       {relief_ctl}
       {bathy_ctl}
-      <label><input type="checkbox" id="ck-casts"> Casts (individual)</label>
-      <div id="cast-filters" class="indent hidden">
-        <label><input type="checkbox" id="ck-suspect" checked>
-          Show QC-suspect</label>
-        <div class="years">Years <output id="yr-out">{y0}&#8211;{y1}</output>
-          <input type="range" id="yr0" min="{y0}" max="{y1}" value="{y0}"
-            aria-label="First year">
-          <input type="range" id="yr1" min="{y0}" max="{y1}" value="{y1}"
-            aria-label="Last year">
+      <label><input type="checkbox" id="ck-casts" checked>
+        CTD casts</label>
+      <div id="cast-filters" class="indent">
+        <label data-tip="A few ONC casts read above 9 mL/L &#8212;
+physically implausible supersaturation, most likely a sensor problem.
+They are drawn as hollow grey dots and already excluded from all site
+statistics; untick to hide them from the map too.">
+          <input type="checkbox" id="ck-suspect" checked>
+          Show QC-flagged casts <span class="hint" tabindex="0"
+          aria-label="What are QC-flagged casts?">?</span></label>
+        <div class="years">
+          <span>Years</span>
+          <select id="yr0" aria-label="First year">{year_opts0}</select>
+          <span>&#8211;</span>
+          <select id="yr1" aria-label="Last year">{year_opts1}</select>
+        </div>
+        <div class="presets">
+          <button type="button" class="preset" data-span="all">All years
+          </button>
+          <button type="button" class="preset" data-span="5">Last 5 yrs
+          </button>
+          <button type="button" class="preset" data-span="1">Last year
+          </button>
         </div>
       </div>
       {model_ctl}
@@ -285,20 +335,14 @@ chosen three-month season." class="lseason">
     <button id="legend-btn" aria-expanded="false"
       title="Legend &amp; visibility">Legend &#9662;</button>
     <div id="legend-panel" class="hidden">
-      <div class="lhead">Status classes <span class="lsub">(mL/L &#183;
-        click to hide/show)</span></div>
+      <div class="lhead">Near-bottom oxygen status</div>
+      <div class="lsub2">Click a status to hide or show those points</div>
       <div class="chips">{chips}</div>
-      <div class="lhead">Reading the markers</div>
-      <div class="lrow"><span class="ring cont"></span> big dark ring =
-        continuous sensor</div>
-      <div class="lrow"><span class="ring visit"></span> small white ring =
-        ship-visit station</div>
-      <div class="lrow">tiny dot = one cast (jittered &#177;&lt;1 km);
-        hollow grey = QC-suspect</div>
+      <div class="lhead">What the markers mean</div>
+      {glyph_rows}
       {model_leg}{bathy_leg}
-      <div class="lrow">faded fill = lower confidence &#183; dashed = record
-        ended</div>
-      <div class="lrow">click any marker for stats + its time series</div>
+      <div class="lfoot">Click any marker to open its stats and full time
+        series below the map.</div>
     </div>
   </div>
 </main>
@@ -367,9 +411,15 @@ var(--line);border-radius:7px;background:var(--panel2);max-width:150px}
 #search{width:100%;padding:8px 10px;border:1px solid var(--line);
 border-radius:9px;font-size:13px;background:var(--panel2)}
 #search::placeholder{color:var(--mut)}
-.years{color:var(--mut);font-size:12px}
-.years output{color:var(--ink);font-weight:600;margin-left:4px}
-.years input[type=range]{width:100%;accent-color:var(--accent)}
+.years{color:var(--mut);font-size:12px;display:flex;gap:7px;
+align-items:center}
+.years select{padding:3px 6px;border:1px solid var(--line);
+border-radius:7px;background:var(--panel2)}
+.presets{display:flex;gap:6px;flex-wrap:wrap}
+.preset{border:1px solid var(--line);background:var(--panel2);
+border-radius:999px;padding:3px 10px;font-size:11.5px;cursor:pointer;
+color:var(--mut)}
+.preset:hover{border-color:var(--accent);color:var(--ink)}
 #sidebar footer{margin-top:auto;color:var(--mut);font-size:11px;
 border-top:1px solid var(--line);padding-top:9px}
 .map-ui{position:absolute;top:12px;right:12px;z-index:1000;display:flex;
@@ -380,7 +430,7 @@ box-shadow:var(--shadow)}
 .map-ui>button:hover{border-color:var(--accent)}
 #legend-btn[aria-expanded=true]{background:var(--accent);
 color:var(--accent-ink);border-color:var(--accent)}
-#legend-panel{position:absolute;top:44px;right:0;width:322px;
+#legend-panel{position:absolute;top:44px;right:0;width:342px;
 max-width:calc(100vw - 24px);background:var(--panel);border:1px solid
 var(--line);border-radius:13px;box-shadow:var(--shadow);
 padding:13px 14px;font-size:12.5px}
@@ -389,12 +439,22 @@ text-transform:uppercase;color:var(--accent)}
 .lhead:first-child{margin-top:0}
 .lsub{font-weight:400;text-transform:none;letter-spacing:0;
 color:var(--mut)}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid
-var(--line);background:var(--panel2);border-radius:999px;
-padding:4px 10px;cursor:pointer;font-size:12px}
+.lsub2{color:var(--mut);font-size:11.5px;margin:-3px 0 7px}
+.chips{display:flex;flex-direction:column;gap:5px}
+.chip{display:flex;gap:9px;align-items:center;border:1px solid
+var(--line);background:var(--panel2);border-radius:9px;
+padding:5px 10px;cursor:pointer;font-size:12.5px;text-align:left}
 .chip:hover{border-color:var(--accent)}
-.chip[aria-pressed=false]{opacity:.42;text-decoration:line-through}
+.chip[aria-pressed=false]{opacity:.42}
+.chip[aria-pressed=false] .chip-name{text-decoration:line-through}
+.chip-name{font-weight:600;min-width:88px}
+.chip-rng{color:var(--mut);margin-left:auto}
+.lg-row{display:flex;gap:10px;align-items:center;margin:6px 0}
+.lg-g{flex:0 0 26px}
+.lg-t{font-size:12.5px;line-height:1.25}
+.lg-sub{color:var(--mut);font-size:11.5px}
+.lfoot{color:var(--mut);font-size:11.5px;border-top:1px solid var(--line);
+margin-top:9px;padding-top:8px}
 .sw{display:inline-block;width:11px;height:11px;border-radius:50%;
 box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 .sw-line{display:inline-block;width:16px;height:0;border-top:2px solid
@@ -826,8 +886,8 @@ APP_JS = r"""(function () {
     restyleSites();
 
     // ---- casts ----
-    var castLayer = L.layerGroup();
-    var castOn = false;
+    var castLayer = L.layerGroup().addTo(map);
+    var castOn = true;
     var castCanvas = L.canvas({padding: 0.4});
     var castMarkers = VI.casts.map(function (c) {
       var mk = L.circleMarker([c.la, c.lo], c.q
@@ -864,6 +924,7 @@ APP_JS = r"""(function () {
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
                       suspect: true};
+    refreshCasts();
     function refreshCasts() {
       VI.casts.forEach(function (c, i) {
         var on = castOn && H.castVisible(c, castFilter, classes);
@@ -919,14 +980,12 @@ APP_JS = r"""(function () {
     // ---- legend dropdown + class chips ----
     var lBtn = document.getElementById("legend-btn");
     var lPanel = document.getElementById("legend-panel");
-    lBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
+    lBtn.addEventListener("click", function () {
       var open = lPanel.classList.toggle("hidden") === false;
       lBtn.setAttribute("aria-expanded", open ? "true" : "false");
     });
-    document.addEventListener("click", function (e) {
-      if (!lPanel.classList.contains("hidden") &&
-          !lPanel.contains(e.target) && e.target !== lBtn) {
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !lPanel.classList.contains("hidden")) {
         lPanel.classList.add("hidden");
         lBtn.setAttribute("aria-expanded", "false");
       }
@@ -984,17 +1043,25 @@ APP_JS = r"""(function () {
     document.getElementById("ck-suspect").addEventListener("change",
       function (e) { castFilter.suspect = e.target.checked; refreshCasts(); });
     var yr0 = document.getElementById("yr0"),
-        yr1 = document.getElementById("yr1"),
-        yrOut = document.getElementById("yr-out");
+        yr1 = document.getElementById("yr1");
     function years() {
       var a = +yr0.value, b = +yr1.value;
       castFilter.y0 = Math.min(a, b);
       castFilter.y1 = Math.max(a, b);
-      yrOut.textContent = castFilter.y0 + "\u2013" + castFilter.y1;
       refreshCasts();
     }
-    yr0.addEventListener("input", years);
-    yr1.addEventListener("input", years);
+    yr0.addEventListener("change", years);
+    yr1.addEventListener("change", years);
+    document.querySelectorAll(".preset").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var yMax = VI.meta.cast_years[1], yMin = VI.meta.cast_years[0];
+        var span = btn.dataset.span;
+        var a = span === "all" ? yMin : Math.max(yMin, yMax - (+span) + 1);
+        yr0.value = String(a);
+        yr1.value = String(yMax);
+        years();
+      });
+    });
     var ckRelief = document.getElementById("ck-relief");
     if (ckRelief && reliefLayer) ckRelief.addEventListener("change",
       function (e) {
@@ -1038,12 +1105,18 @@ APP_JS = r"""(function () {
         map.setView([s.lat, s.lon], Math.max(map.getZoom(), 11));
         openDetail(s.detail, s.code, s.code);
       });
+    // a #CODE link pans to the site and pulses its tooltip, but the dock
+    // only opens on an actual click
     var initial = decodeURIComponent(location.hash.replace("#", ""))
       .toUpperCase();
     if (byCode[initial]) {
       var s0 = byCode[initial];
       map.setView([s0.lat, s0.lon], 11);
-      openDetail(s0.detail, s0.code);
+      var mk0 = siteMarkers[s0.code];
+      if (mk0) {
+        setTimeout(function () { mk0.openTooltip(); }, 300);
+        setTimeout(function () { mk0.closeTooltip(); }, 3200);
+      }
     }
 
     H.counts = function () {

@@ -48,7 +48,18 @@ setTimeout(() => {
 
   check("site markers on boot", counts().sites, VI.sites.length);
   check("cast years start at DFO era", VI.meta.cast_years[0], 2006);
-  check("deep link opens detail dock",
+  check("CTD casts on by default", counts().casts, VI.casts.length);
+  check("cast filters visible by default",
+    !doc.getElementById("cast-filters").classList.contains("hidden"), true);
+  const bac = VI.sites.find(x => x.code === "BACAX");
+  check("deep link pans to the site (no dock)",
+    Math.abs(A.map.getCenter().lat - bac.lat) < 0.05 &&
+    doc.getElementById("detail").classList.contains("hidden") &&
+    !doc.body.classList.contains("detail-open"), true);
+  // open the dock the intended way: a user action
+  const s1 = doc.getElementById("search");
+  s1.value = "BACAX - x"; fire(s1, "change");
+  check("dock opens on user action",
     !doc.getElementById("detail").classList.contains("hidden"), true);
   check("dock resizes map (body.detail-open)",
     doc.body.classList.contains("detail-open"), true);
@@ -120,6 +131,17 @@ setTimeout(() => {
   const lb = doc.getElementById("legend-btn");
   lb.click();
   check("legend panel opens", lb.getAttribute("aria-expanded"), "true");
+  doc.body.dispatchEvent(new w.MouseEvent("click", {bubbles: true}));
+  check("legend stays pinned on outside click",
+    !doc.getElementById("legend-panel").classList.contains("hidden"), true);
+  lb.click();
+  check("legend closes on second click",
+    doc.getElementById("legend-panel").classList.contains("hidden"), true);
+  lb.click();  // reopen for chip tests
+  check("legend glyph rows present",
+    doc.querySelectorAll("#legend-panel .lg-row").length >= 6, true);
+  check("QC-flagged explainer present",
+    doc.querySelector("#cast-filters label[data-tip]") !== null, true);
   const nGoodJJA = VI.sites.filter(s =>
     A.siteVisible(s, "jja", CONFS, ALL) &&
     (s.classes.jja || "unclassified") === "good").length;
@@ -140,17 +162,26 @@ setTimeout(() => {
   });
 
   // casts + year/suspect/class filters
-  const ck = doc.getElementById("ck-casts");
-  ck.checked = true; fire(ck, "change");
   check("cast layer (ONC + DFO)", counts().casts, VI.casts.length);
   check("DFO casts present",
     VI.casts.filter(c => c.f).length > 10000, true);
   doc.getElementById("yr0").value = String(VI.meta.cast_years[1]);
-  fire(doc.getElementById("yr0"), "input");
+  fire(doc.getElementById("yr0"), "change");
   const f1 = { y0: VI.meta.cast_years[1], y1: VI.meta.cast_years[1],
     suspect: true };
   check("year filter", counts().casts,
     VI.casts.filter(c => A.castVisible(c, f1, ALL)).length);
+  // presets
+  doc.querySelector('.preset[data-span="5"]').click();
+  const p5 = { y0: VI.meta.cast_years[1] - 4, y1: VI.meta.cast_years[1],
+    suspect: false };
+  check("preset 'Last 5 yrs'", counts().casts,
+    VI.casts.filter(c => A.castVisible(c, {...p5, suspect: true}, ALL))
+      .length);
+  doc.querySelector('.preset[data-span="all"]').click();
+  check("preset 'All years' restores", counts().casts, VI.casts.length);
+  doc.getElementById("yr0").value = String(VI.meta.cast_years[1]);
+  fire(doc.getElementById("yr0"), "change");
   const sus = doc.getElementById("ck-suspect");
   sus.checked = false; fire(sus, "change");
   check("suspect filter", counts().casts,

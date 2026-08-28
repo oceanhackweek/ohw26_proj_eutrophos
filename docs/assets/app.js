@@ -353,8 +353,8 @@
     restyleSites();
 
     // ---- casts ----
-    var castLayer = L.layerGroup();
-    var castOn = false;
+    var castLayer = L.layerGroup().addTo(map);
+    var castOn = true;
     var castCanvas = L.canvas({padding: 0.4});
     var castMarkers = VI.casts.map(function (c) {
       var mk = L.circleMarker([c.la, c.lo], c.q
@@ -391,6 +391,7 @@
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
                       suspect: true};
+    refreshCasts();
     function refreshCasts() {
       VI.casts.forEach(function (c, i) {
         var on = castOn && H.castVisible(c, castFilter, classes);
@@ -446,14 +447,12 @@
     // ---- legend dropdown + class chips ----
     var lBtn = document.getElementById("legend-btn");
     var lPanel = document.getElementById("legend-panel");
-    lBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
+    lBtn.addEventListener("click", function () {
       var open = lPanel.classList.toggle("hidden") === false;
       lBtn.setAttribute("aria-expanded", open ? "true" : "false");
     });
-    document.addEventListener("click", function (e) {
-      if (!lPanel.classList.contains("hidden") &&
-          !lPanel.contains(e.target) && e.target !== lBtn) {
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !lPanel.classList.contains("hidden")) {
         lPanel.classList.add("hidden");
         lBtn.setAttribute("aria-expanded", "false");
       }
@@ -511,17 +510,25 @@
     document.getElementById("ck-suspect").addEventListener("change",
       function (e) { castFilter.suspect = e.target.checked; refreshCasts(); });
     var yr0 = document.getElementById("yr0"),
-        yr1 = document.getElementById("yr1"),
-        yrOut = document.getElementById("yr-out");
+        yr1 = document.getElementById("yr1");
     function years() {
       var a = +yr0.value, b = +yr1.value;
       castFilter.y0 = Math.min(a, b);
       castFilter.y1 = Math.max(a, b);
-      yrOut.textContent = castFilter.y0 + "\u2013" + castFilter.y1;
       refreshCasts();
     }
-    yr0.addEventListener("input", years);
-    yr1.addEventListener("input", years);
+    yr0.addEventListener("change", years);
+    yr1.addEventListener("change", years);
+    document.querySelectorAll(".preset").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var yMax = VI.meta.cast_years[1], yMin = VI.meta.cast_years[0];
+        var span = btn.dataset.span;
+        var a = span === "all" ? yMin : Math.max(yMin, yMax - (+span) + 1);
+        yr0.value = String(a);
+        yr1.value = String(yMax);
+        years();
+      });
+    });
     var ckRelief = document.getElementById("ck-relief");
     if (ckRelief && reliefLayer) ckRelief.addEventListener("change",
       function (e) {
@@ -565,12 +572,18 @@
         map.setView([s.lat, s.lon], Math.max(map.getZoom(), 11));
         openDetail(s.detail, s.code, s.code);
       });
+    // a #CODE link pans to the site and pulses its tooltip, but the dock
+    // only opens on an actual click
     var initial = decodeURIComponent(location.hash.replace("#", ""))
       .toUpperCase();
     if (byCode[initial]) {
       var s0 = byCode[initial];
       map.setView([s0.lat, s0.lon], 11);
-      openDetail(s0.detail, s0.code);
+      var mk0 = siteMarkers[s0.code];
+      if (mk0) {
+        setTimeout(function () { mk0.openTooltip(); }, 300);
+        setTimeout(function () { mk0.closeTooltip(); }, 3200);
+      }
     }
 
     H.counts = function () {
