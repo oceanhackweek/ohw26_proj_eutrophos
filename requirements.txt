@@ -1,0 +1,5 @@
+folium>=0.20
+pandas>=2.0
+numpy
+matplotlib      # bathymetry contours (optional layer)
+netCDF4         # GEBCO .nc reading (optional layer)

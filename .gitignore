@@ -18,3 +18,4 @@ contributor_folders/*/data/onc_cache/
 # Python
 __pycache__/
 *.pyc
+node_modules/
