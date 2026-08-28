@@ -6,7 +6,7 @@
 <title>Vancouver Island near-bottom oxygen</title>
 <link rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
-<link rel="stylesheet" href="assets/style.css?v=53524e7f">
+<link rel="stylesheet" href="assets/style.css?v=e76fde82">
 </head>
 <body>
 <button id="sb-toggle" aria-label="Toggle sidebar">&#9776;</button>
@@ -18,7 +18,7 @@
         title="Light / dark mode">&#9789;</button>
     </div>
     <p class="sub">43 sites &#183; 17612 casts &#183;
-      built 2026-08-28 19:05 UTC</p>
+      built 2026-08-28 19:19 UTC</p>
   </header>
   <section>
     <input id="search" list="site-list" placeholder="Find a site&#8230;"
@@ -77,6 +77,11 @@ always draw on top."><input type="checkbox" id="ck-surface">
       <label><input type="checkbox" id="ck-casts" checked>
         CTD casts</label>
       <div id="cast-filters" class="indent">
+        <div class="row src-row"><span class="src-lab">Source</span>
+          <label><input type="checkbox" id="ck-src-onc" checked>
+            ONC</label>
+          <label><input type="checkbox" id="ck-src-dfo" checked>
+            DFO</label></div>
         <label data-tip="A few ONC casts read above 9 mL/L &#8212;
 physically implausible supersaturation, most likely a sensor problem.
 They are drawn as hollow grey dots and already excluded from all site
@@ -137,9 +142,9 @@ statistics; untick to hide them from the map too.">
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
-</script>
+3</script>
 <script src="assets/model_manifest.js"></script>
-<script src="assets/data.js?v=09af4e96"></script>
-<script src="assets/app.js?v=dcd8eb86"></script>
+<script src="assets/data.js?v=abb0e72a"></script>
+<script src="assets/app.js?v=4b78cff6"></script>
 </body>
 </html>

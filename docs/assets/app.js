@@ -11,7 +11,7 @@
     },
     castVisible: function (c, f, classes) {
       return c.y >= f.y0 && c.y <= f.y1 && (f.suspect || !c.q) &&
-        classes.indexOf(c.c) !== -1;
+        (c.f ? f.dfo : f.onc) && classes.indexOf(c.c) !== -1;
     }
   };
   window.VIAPP = H;
@@ -252,9 +252,13 @@
               (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : ""));
         tip.classList.remove("hidden");
         var hr = host.getBoundingClientRect();
-        var tx = (ev.clientX - hr.left) + 14;
-        tip.style.left = Math.min(tx, (hr.width || W) - 170) + "px";
-        tip.style.top = Math.max(6, ev.clientY - hr.top - 34) + "px";
+        var hw = hr.width || W, hh = hr.height || H;
+        var tw = tip.offsetWidth || 190, th = tip.offsetHeight || 30;
+        var cx2 = ev.clientX - hr.left, cy2 = ev.clientY - hr.top;
+        var tx = cx2 + tw + 22 > hw ? cx2 - tw - 14 : cx2 + 14;
+        tip.style.left = Math.max(4, Math.min(tx, hw - tw - 4)) + "px";
+        tip.style.top = Math.max(4,
+          Math.min(cy2 - th - 6, hh - th - 4)) + "px";
       });
       cap.addEventListener("mouseleave", function () {
         cross.classList.add("hiddenattr");
@@ -339,10 +343,6 @@
         {pane: "relief", opacity: 0.97,
          attribution: "GEBCO 2026 Grid (public domain)"}).addTo(map);
     }
-
-    L.rectangle([[VI.box.s, VI.box.w], [VI.box.n, VI.box.e]],
-      {color: "#557", weight: 1.2, dashArray: "6 4", fill: false,
-       interactive: false}).addTo(map);
 
     // ---- detail dock (info left, time series right) ----
     var detail = document.getElementById("detail");
@@ -514,7 +514,7 @@
       return h;
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
-                      suspect: true};
+                      suspect: true, onc: true, dfo: true};
     refreshCasts();
     function refreshCasts() {
       VI.casts.forEach(function (c, i) {
@@ -736,6 +736,10 @@
       else map.removeLayer(castLayer);
       refreshCasts();
     });
+    document.getElementById("ck-src-onc").addEventListener("change",
+      function (e) { castFilter.onc = e.target.checked; refreshCasts(); });
+    document.getElementById("ck-src-dfo").addEventListener("change",
+      function (e) { castFilter.dfo = e.target.checked; refreshCasts(); });
     document.getElementById("ck-suspect").addEventListener("change",
       function (e) { castFilter.suspect = e.target.checked; refreshCasts(); });
     var yr0 = document.getElementById("yr0"),
