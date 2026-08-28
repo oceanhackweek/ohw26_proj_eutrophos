@@ -160,28 +160,52 @@
           : {cx: X(c.d), cy: Y(c.v), r: 3.4, fill: colors[c.c],
              "class": "ccast"});
       });
-      // captions: lens (left), sampling kind or reset (right), hint (btm)
+      // captions: lens (left), glyph key (right), hint + reset (bottom)
       if (data.lens)
         el("text", {x: ML, y: MT - 8, "class": "clab lens-cap"})
           .textContent = "Lens: " + data.lens;
-      if (x0 > d0 || x1 < d1) {
-        var rb = el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
-          "class": "clab creset"});
-        rb.textContent = "[reset zoom]";
-        rb.addEventListener("click", function () {
-          x0 = d0; x1 = d1; render();
+      var kx = W - MR;
+      function keyItem(label, glyph) {
+        var t = el("text", {x: kx, y: MT - 8, "text-anchor": "end",
+          "class": "clab"});
+        t.textContent = label;
+        kx -= label.length * 6.6 + 6;
+        glyph(kx);
+        kx -= 24;
+      }
+      if (data.model) {
+        keyItem("model median", function (x) {
+          el("line", {x1: x - 18, x2: x, y1: MT - 12, y2: MT - 12,
+            "class": "cmline"});
         });
-      } else {
-        el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
-          "class": "clab cend cmut"})
-          .textContent = (data.series
-            ? (data.series.k === "w" ? "weekly means" : "daily values")
-            : "individual casts") +
-            (data.model ? " \u00b7 modeled (dashed + band)" : "");
+        keyItem("80% band", function (x) {
+          el("rect", {x: x - 18, y: MT - 17, width: 18, height: 10,
+            "class": "cmband"});
+        });
+      }
+      if (casts.length) {
+        keyItem("casts (status color)", function (x) {
+          el("circle", {cx: x - 9, cy: MT - 12, r: 3.4,
+            fill: colors.good, "class": "ccast"});
+        });
+      }
+      if (pts.length) {
+        keyItem(data.series.k === "w" ? "observed (weekly)"
+          : "observed (daily)", function (x) {
+          el("line", {x1: x - 18, x2: x, y1: MT - 12, y2: MT - 12,
+            "class": "cline"});
+        });
       }
       el("text", {x: W - MR, y: H - 7, "text-anchor": "end",
         "class": "clab cmut"})
         .textContent = "drag to zoom \u00b7 double-click resets";
+      if (x0 > d0 || x1 < d1) {
+        var rb = el("text", {x: ML, y: H - 7, "class": "clab creset"});
+        rb.textContent = "[reset zoom]";
+        rb.addEventListener("click", function () {
+          x0 = d0; x1 = d1; render();
+        });
+      }
       // interaction layers
       var cross = el("line", {x1: 0, x2: 0, y1: MT, y2: H - MB,
         "class": "ccross hiddenattr"});
@@ -222,8 +246,8 @@
         focus.classList.remove("hiddenattr");
         tip.innerHTML = "<b>" + (n.t || fmtDate(n.d)) + "</b> \u00b7 " +
           (n.mo
-            ? "modeled " + n.v.toFixed(2) + " (" + n.lo.toFixed(2) +
-              "\u2013" + n.hi.toFixed(2) + ") mL/L"
+            ? "model median " + n.v.toFixed(2) + " \u00b7 80% band " +
+              n.lo.toFixed(2) + "\u2013" + n.hi.toFixed(2) + " mL/L"
             : n.v.toFixed(2) + " mL/L" +
               (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : ""));
         tip.classList.remove("hidden");
@@ -305,8 +329,10 @@
     bases.ocean.addTo(map);
 
     map.createPane("relief").style.zIndex = 350;
+    map.createPane("scrim").style.zIndex = 300;     // fades the basemap
     map.createPane("surface").style.zIndex = 360;   // above relief, below
                                                     // isobaths + cast dots
+    map.createPane("coast").style.zIndex = 365;     // coastline over surface
     var reliefLayer = null;
     if (VI.relief) {
       reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
@@ -481,9 +507,10 @@
       if (c.q) h += "<div class='i-note warn'><b>QC-flagged:</b> reads " +
         "above the plausible range for this site; shown hollow and " +
         "excluded from all statistics.</div>";
-      if (c.j) h += "<div class='i-note info'>Dot position jittered " +
-        "~100\u2013800 m; all casts at this station share one nominal " +
-        "coordinate.</div>";
+      if (c.j) h += "<div class='i-note info'>All casts at this " +
+        "station share one nominal coordinate, so dots are arranged in " +
+        "a time-ordered spiral (oldest at the centre, newest ~600 m " +
+        "out).</div>";
       return h;
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
@@ -522,18 +549,36 @@
         o.textContent = f.label;
         surfaceSel.appendChild(o);
       });
+      // while the surface is on, fade the basemap and draw the coastline
+      // so the frame's colors never fight the map's own greens
+      var scrimLayer = L.rectangle([[40, -145], [58, -105]],
+        {pane: "scrim", stroke: false, fill: true, fillOpacity: 1,
+         interactive: false, className: "map-scrim"});
+      var coastLayer = VI.coast ? L.geoJSON(
+        {type: "Feature", properties: {},
+         geometry: {type: "MultiLineString", coordinates: VI.coast}},
+        {pane: "coast", interactive: false,
+         style: {weight: 1, opacity: .9, fill: false,
+                 className: "coastline"}}) : null;
       var showSurface = function () {
         if (surfaceLayer) map.removeLayer(surfaceLayer);
         surfaceLayer = L.imageOverlay("model_grid/" + surfaceSel.value,
           MODEL_MANIFEST.bounds,
-          {pane: "surface", opacity: 0.85,
+          {pane: "surface", opacity: 0.9,
            attribution: "Modeled \u00b7 " + MODEL_MANIFEST.model_version});
         surfaceLayer.addTo(map);
+        scrimLayer.addTo(map);
+        if (coastLayer) coastLayer.addTo(map);
+      };
+      var hideSurface = function () {
+        if (surfaceLayer) map.removeLayer(surfaceLayer);
+        map.removeLayer(scrimLayer);
+        if (coastLayer) map.removeLayer(coastLayer);
       };
       var ckS = document.getElementById("ck-surface");
       ckS.addEventListener("change", function (e) {
         if (e.target.checked) showSurface();
-        else if (surfaceLayer) map.removeLayer(surfaceLayer);
+        else hideSurface();
       });
       surfaceSel.addEventListener("change", function () {
         if (ckS.checked) showSurface();

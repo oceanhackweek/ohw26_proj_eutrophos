@@ -220,9 +220,9 @@ def gap_fill(table: pd.DataFrame, X_cols: list[str], stations_mode: str = "cf",
 def main() -> int:
     p = argparse.ArgumentParser(description="Train the oxygen model.")
     p.add_argument("--skip-predictions", action="store_true")
-    p.add_argument("--stations", choices=["cf", "cf+dfo"], default="cf")
-    p.add_argument("--min-casts", type=int, default=10)
-    p.add_argument("--cadence", choices=["daily", "weekly"], default="daily")
+    p.add_argument("--stations", choices=["cf", "cf+dfo"], default="cf+dfo")
+    p.add_argument("--min-casts", type=int, default=3)
+    p.add_argument("--cadence", choices=["daily", "weekly"], default="weekly")
     args = p.parse_args()
 
     table = pd.read_csv(DERIVED / "training_table.csv")
