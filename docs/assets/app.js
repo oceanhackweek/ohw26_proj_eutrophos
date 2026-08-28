@@ -5,55 +5,67 @@
     classForLens: function (site, lens) {
       return site.classes[lens] || null;
     },
-    siteVisible: function (site, confs) {
-      return confs.indexOf(site.conf) !== -1;
+    siteVisible: function (site, lens, confs, classes) {
+      var c = site.classes[lens] || "unclassified";
+      return confs.indexOf(site.conf) !== -1 && classes.indexOf(c) !== -1;
     },
-    castVisible: function (c, f) {
-      return c.y >= f.y0 && c.y <= f.y1 && (f.suspect || !c.q);
+    castVisible: function (c, f, classes) {
+      return c.y >= f.y0 && c.y <= f.y1 && (f.suspect || !c.q) &&
+        classes.indexOf(c.c) !== -1;
     }
   };
   window.VIAPP = H;
+
+  function initTheme() {
+    var t;
+    try { t = localStorage.getItem("vi-theme"); } catch (e) {}
+    if (!t) t = (window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+    return t;
+  }
+  var theme = initTheme();
 
   function boot() {
     if (!window.L || !document.getElementById("map")) return;
     var VI = window.VI;
     var map = L.map("map", {zoomControl: true})
       .setView([49.35, -124.9], 7);
-    L.control.scale().addTo(map);
+    L.control.scale({position: "bottomright"}).addTo(map);
+    H.map = map;
 
-    function cartoTile() {
-      return L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        {attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-         maxZoom: 19});
-    }
     var bases = {
-      carto: L.layerGroup([cartoTile()]),
-      ocean: L.layerGroup([L.tileLayer(
+      ocean: L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/" +
         "World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
         {attribution: "Tiles &copy; Esri &mdash; GEBCO, NOAA, CHS, OSU, " +
          "UNH, CSUMB, National Geographic, DeLorme, NAVTEQ, Esri",
-         maxNativeZoom: 13, maxZoom: 18})]),
-      imagery: L.layerGroup([L.tileLayer(
+         maxNativeZoom: 13, maxZoom: 18}),
+      imagery: L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/" +
         "World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {attribution: "Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, " +
          "USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, " +
-         "GIS User Community"})])
+         "GIS User Community"}),
+      dark: L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/" +
+        "World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        {attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+         maxNativeZoom: 16, maxZoom: 18})
     };
-    map.createPane("relief").style.zIndex = 350;   // above tiles, below vectors
-    if (VI.relief) {
-      bases.gebco = L.layerGroup([cartoTile(),
-        L.imageOverlay(VI.relief.url, VI.relief.bounds,
-          {pane: "relief", attribution: "GEBCO 2026 Grid (public domain)"})]);
-    }
-    var startBase = document.querySelector("#base-group input:checked");
-    bases[startBase ? startBase.value : "ocean"].addTo(map);
+    bases.ocean.addTo(map);
 
-    // study box
+    map.createPane("relief").style.zIndex = 350;
+    var reliefLayer = null;
+    if (VI.relief) {
+      reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
+        {pane: "relief", opacity: 0.92,
+         attribution: "GEBCO 2026 Grid (public domain)"}).addTo(map);
+    }
+
     L.rectangle([[VI.box.s, VI.box.w], [VI.box.n, VI.box.e]],
-      {color: "#555", weight: 1.2, dashArray: "6 4", fill: false,
+      {color: "#557", weight: 1.2, dashArray: "6 4", fill: false,
        interactive: false}).addTo(map);
 
     // ---- detail panel ----
@@ -76,9 +88,12 @@
         location.pathname + location.search);
     };
 
-    // ---- site markers ----
+    // ---- state ----
     var lens = "exposure";
     var confs = ["high", "medium", "low"];
+    var classes = ["good", "at_risk", "hypoxic", "anoxic", "unclassified"];
+
+    // ---- site markers ----
     var siteLayer = L.layerGroup().addTo(map);
     var siteMarkers = {};
     VI.sites.forEach(function (s) {
@@ -90,9 +105,7 @@
         fillOpacity: VI.opacity[s.conf] || 0.6,
         fill: true
       });
-      mk.on("click", function () {
-        openDetail(s.detail, s.code, s.code);
-      });
+      mk.on("click", function () { openDetail(s.detail, s.code, s.code); });
       mk.bindTooltip("", {sticky: true});
       siteMarkers[s.code] = mk;
     });
@@ -105,7 +118,7 @@
         mk.setStyle({fillColor: VI.colors[c] || VI.colors.unclassified});
         mk.setTooltipContent(s.name + " - " +
           (VI.labels[c] || "no data") + (tag ? " (" + tag + ")" : ""));
-        var on = H.siteVisible(s, confs);
+        var on = H.siteVisible(s, lens, confs, classes);
         if (on && !siteLayer.hasLayer(mk)) siteLayer.addLayer(mk);
         if (!on && siteLayer.hasLayer(mk)) siteLayer.removeLayer(mk);
       });
@@ -114,6 +127,7 @@
 
     // ---- casts ----
     var castLayer = L.layerGroup();
+    var castOn = false;
     var castMarkers = VI.casts.map(function (c) {
       var mk = L.circleMarker([c.la, c.lo], c.q
         ? {radius: 3, color: "#868e96", weight: 1.4, fill: false}
@@ -147,15 +161,14 @@
                       suspect: true};
     function refreshCasts() {
       VI.casts.forEach(function (c, i) {
-        var on = H.castVisible(c, castFilter);
+        var on = castOn && H.castVisible(c, castFilter, classes);
         var mk = castMarkers[i];
         if (on && !castLayer.hasLayer(mk)) castLayer.addLayer(mk);
         if (!on && castLayer.hasLayer(mk)) castLayer.removeLayer(mk);
       });
     }
-    refreshCasts();
 
-    // ---- bathymetry ----
+    // ---- bathymetry isobaths ----
     var bathyLayer = null;
     if (VI.bathy) {
       bathyLayer = L.layerGroup(VI.bathy.map(function (lev) {
@@ -184,9 +197,61 @@
       }));
     }
 
+    // ---- fit-to-data ----
+    function fitData() {
+      var pts = [];
+      VI.sites.forEach(function (s) {
+        if (H.siteVisible(s, lens, confs, classes)) pts.push([s.lat, s.lon]);
+      });
+      if (castOn) VI.casts.forEach(function (c) {
+        if (H.castVisible(c, castFilter, classes)) pts.push([c.la, c.lo]);
+      });
+      if (!pts.length) return;
+      map.fitBounds(L.latLngBounds(pts).pad(0.07));
+    }
+    document.getElementById("fit-btn").addEventListener("click", fitData);
+
+    // ---- legend dropdown + class chips ----
+    var lBtn = document.getElementById("legend-btn");
+    var lPanel = document.getElementById("legend-panel");
+    lBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var open = lPanel.classList.toggle("hidden") === false;
+      lBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    document.addEventListener("click", function (e) {
+      if (!lPanel.classList.contains("hidden") &&
+          !lPanel.contains(e.target) && e.target !== lBtn) {
+        lPanel.classList.add("hidden");
+        lBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+    document.querySelectorAll(".chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        var c = chip.dataset.class;
+        var i = classes.indexOf(c);
+        if (i === -1) classes.push(c);
+        else classes.splice(i, 1);
+        chip.setAttribute("aria-pressed", i === -1 ? "true" : "false");
+        restyleSites();
+        refreshCasts();
+      });
+    });
+
     // ---- sidebar wiring ----
+    var seasonSel = document.getElementById("season-select");
+    function currentLens() {
+      var r = document.querySelector("input[name=lens]:checked").value;
+      return r === "seasonal" ? seasonSel.value : r;
+    }
     document.getElementById("lens-group").addEventListener("change",
-      function (e) { lens = e.target.value; restyleSites(); });
+      function () { lens = currentLens(); restyleSites(); refreshCasts(); });
+    seasonSel.addEventListener("change", function () {
+      document.querySelector("input[name=lens][value=seasonal]")
+        .checked = true;
+      lens = seasonSel.value;
+      restyleSites(); refreshCasts();
+    });
     document.getElementById("base-group").addEventListener("change",
       function (e) {
         Object.keys(bases).forEach(function (k) {
@@ -204,10 +269,12 @@
     });
     var ckCasts = document.getElementById("ck-casts");
     ckCasts.addEventListener("change", function () {
+      castOn = ckCasts.checked;
       document.getElementById("cast-filters").classList
-        .toggle("hidden", !ckCasts.checked);
-      if (ckCasts.checked) castLayer.addTo(map);
+        .toggle("hidden", !castOn);
+      if (castOn) castLayer.addTo(map);
       else map.removeLayer(castLayer);
+      refreshCasts();
     });
     document.getElementById("ck-suspect").addEventListener("change",
       function (e) { castFilter.suspect = e.target.checked; refreshCasts(); });
@@ -223,6 +290,12 @@
     }
     yr0.addEventListener("input", years);
     yr1.addEventListener("input", years);
+    var ckRelief = document.getElementById("ck-relief");
+    if (ckRelief && reliefLayer) ckRelief.addEventListener("change",
+      function (e) {
+        if (e.target.checked) reliefLayer.addTo(map);
+        else map.removeLayer(reliefLayer);
+      });
     var ckBathy = document.getElementById("ck-bathy");
     if (ckBathy && bathyLayer) ckBathy.addEventListener("change",
       function (e) {
@@ -235,6 +308,19 @@
         if (e.target.checked) modelLayer.addTo(map);
         else map.removeLayer(modelLayer);
       });
+
+    // ---- theme toggle ----
+    var tBtn = document.getElementById("theme-btn");
+    function paintThemeBtn() {
+      tBtn.innerHTML = theme === "dark" ? "&#9788;" : "&#9789;";
+    }
+    paintThemeBtn();
+    tBtn.addEventListener("click", function () {
+      theme = theme === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", theme);
+      try { localStorage.setItem("vi-theme", theme); } catch (e) {}
+      paintThemeBtn();
+    });
 
     // ---- search + deep link ----
     var byCode = {};

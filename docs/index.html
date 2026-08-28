@@ -12,72 +12,104 @@
 <button id="sb-toggle" aria-label="Toggle sidebar">&#9776;</button>
 <aside id="sidebar">
   <header>
-    <h1>VI near-bottom O&#8322;</h1>
+    <div class="hrow">
+      <h1>VI near-bottom O&#8322;</h1>
+      <button id="theme-btn" aria-label="Switch color theme"
+        title="Light / dark mode">&#9789;</button>
+    </div>
     <p class="sub">43 sites &#183; 846 casts &#183;
-      built 2026-08-27</p>
+      built 2026-08-28</p>
   </header>
   <section>
     <input id="search" list="site-list" placeholder="Find a site&#8230;"
-      autocomplete="off">
+      autocomplete="off" aria-label="Find a site">
     <datalist id="site-list"><option value="CF001 - CF001 (BI-1)"><option value="CF005 - CF005 (BI-5)"><option value="CF006 - CF006 (BI-6)"><option value="CF010 - CF010 (BI-10)"><option value="CF016 - CF016 (BI-16)"><option value="CF031 - CF031 (ONC Haro Strait Testing Site)"><option value="CF119 - CF119 (BPS)"><option value="CF141 - CF141 (GVHA10)"><option value="CF226 - CF226 (BI-7)"><option value="CF361 - CF361 (BSM-1)"><option value="CF425 - CF425 (BI-3.A)"><option value="CF426 - CF426 (BI-8.A)"><option value="CF427 - CF427 (BI-9.A)"><option value="CF428 - CF428 (BI-11.A)"><option value="CF429 - CF429 (BI-12.A)"><option value="CF430 - CF430 (BI-14.A)"><option value="CF431 - CF431 (BI-15.A)"><option value="CF454 - CF454 (BI-17)"><option value="CF467 - CF467 (BI-2.A)"><option value="CF581 - CF581 (BF-2)"><option value="CF582 - CF582 (BF-3)"><option value="CF583 - CF583 (BF-4)"><option value="CF584 - CF584 (BF-5)"><option value="CF585 - CF585 (BF-6)"><option value="CF586 - CF586 (BF-7)"><option value="CF587 - CF587 (BF-8)"><option value="CF588 - CF588 (BF-9)"><option value="BACAX - Barkley Canyon Axis"><option value="BDYPM - Boundary Pass Mooring"><option value="BIIP - Burrard Inlet Underwater Network"><option value="CCIP - China Creek Underwater Network"><option value="FGPD - Folger Deep"><option value="JFCN - JFCN Mooring"><option value="NCBC - Barkley Upper Slope"><option value="PVIP - Saanich Inlet VENUS Instrument Platform"><option value="SCVIP - Strait of Georgia VENUS Instrument Platform"><option value="SEVIP - Strait of Georgia East VENUS Instrument Platform"><option value="SILL - Saanich Inlet Sill"><option value="AS04 - AS04 Mooring"><option value="CRIP - Campbell River Underwater Network"><option value="FGPPN - Folger Pinnacle"><option value="JF2C - JF2C Mooring"><option value="MAC - Macaulay Outfall Mooring"></datalist>
   </section>
   <section>
     <h2>Status lens</h2>
-    <div class="stack" id="lens-group"><label><input type="radio" name="lens" value="exposure" checked> Exposure (10th percentile)</label>
-<label><input type="radio" name="lens" value="worst"> Worst case (record minimum)</label>
-<label><input type="radio" name="lens" value="djf"> Season: DJF (winter) p10</label>
-<label><input type="radio" name="lens" value="mam"> Season: MAM (spring) p10</label>
-<label><input type="radio" name="lens" value="jja"> Season: JJA (summer) p10</label>
-<label><input type="radio" name="lens" value="son"> Season: SON (fall) p10</label></div>
+    <div class="stack" id="lens-group">
+      <label title="10th percentile of daily near-bottom O&#8322; over the
+whole record &#8212; levels dip below this only ~10% of days. A stable
+&#8216;how low it typically gets&#8217;.">
+        <input type="radio" name="lens" value="exposure" checked>
+        Typical low <span class="hint">?</span></label>
+      <label title="The single lowest daily value ever recorded at the site
+&#8212; a one-day extreme, sensitive to outliers.">
+        <input type="radio" name="lens" value="worst">
+        Worst case <span class="hint">?</span></label>
+      <label title="Same 10th-percentile idea, computed only within the
+chosen three-month season." class="lseason">
+        <input type="radio" name="lens" value="seasonal"> Seasonal
+        <select id="season-select" aria-label="Season"><option value="djf">Winter (DJF)</option>
+<option value="mam">Spring (MAM)</option>
+<option value="jja">Summer (JJA)</option>
+<option value="son">Fall (SON)</option></select>
+      </label>
+    </div>
   </section>
   <section>
     <h2>Basemap</h2>
-    <div class="stack" id="base-group"><label><input type="radio" name="base" value="gebco" checked> GEBCO shaded relief (local data)</label>
-<label><input type="radio" name="base" value="ocean"> Esri Ocean (bathymetry shading)</label>
-<label><input type="radio" name="base" value="imagery"> Esri World Imagery</label>
-<label><input type="radio" name="base" value="carto"> Light (CartoDB)</label></div>
+    <div class="stack" id="base-group">
+      <label><input type="radio" name="base" value="ocean" checked>
+        Esri Ocean</label>
+      <label><input type="radio" name="base" value="imagery">
+        Esri Imagery</label>
+      <label><input type="radio" name="base" value="dark">
+        Esri Dark Gray</label>
+    </div>
   </section>
   <section>
-    <h2>Overlays &amp; filters</h2>
+    <h2>Overlays</h2>
     <div class="stack">
-      <label><input type="checkbox" id="ck-bathy" checked> Bathymetry (GEBCO isobaths)</label>
+      <label title="Hillshaded GEBCO grid drawn over the basemap"><input type="checkbox" id="ck-relief" checked> GEBCO shaded relief</label>
+      <label><input type="checkbox" id="ck-bathy" checked> Isobaths (100&#8211;2000 m)</label>
       <label><input type="checkbox" id="ck-casts"> Casts (individual)</label>
       <div id="cast-filters" class="indent hidden">
         <label><input type="checkbox" id="ck-suspect" checked>
-          Show QC-suspect casts</label>
+          Show QC-suspect</label>
         <div class="years">Years <output id="yr-out">2019&#8211;2026</output>
-          <input type="range" id="yr0" min="2019" max="2026" value="2019">
-          <input type="range" id="yr1" min="2019" max="2026" value="2026">
+          <input type="range" id="yr0" min="2019" max="2026" value="2019"
+            aria-label="First year">
+          <input type="range" id="yr1" min="2019" max="2026" value="2026"
+            aria-label="Last year">
         </div>
       </div>
       
-      <div class="gap"></div>
-      <label><input type="checkbox" name="conf" value="high" checked> High confidence</label>
-<label><input type="checkbox" name="conf" value="medium" checked> Medium confidence</label>
-<label><input type="checkbox" name="conf" value="low" checked> Low confidence</label>
     </div>
   </section>
-  <details open>
-    <summary>Legend</summary>
-    <div class="legend">
-      <div><span class="sw" style="background:#2f9e44"></span> Good (&#8805; 2.8 mL/L)</div><div><span class="sw" style="background:#f59f00"></span> At risk (&lt; 2.8)</div><div><span class="sw" style="background:#e03131"></span> Hypoxic (&lt; 1.4)</div><div><span class="sw" style="background:#5f3dc4"></span> Anoxic (&lt; 0.1)</div><div><span class="sw" style="background:#868e96"></span> Unclassified</div>
-      <div class="gap"></div>
-      <div><span class="ring cont"></span> large dark ring = continuous
-        sensor</div>
-      <div><span class="ring visit"></span> small white ring = ship-visit
-        station</div>
-      <div>Tiny dot = one cast (jittered for visibility); hollow grey =
-        QC-suspect</div>
-      <div><span class="sw-line"></span> GEBCO isobaths (100&#8211;2000 m)</div>
-      <div>Faded fill = lower confidence; dashed = record ended</div>
-      <div class="gap"></div>
-      <div>Click any marker for stats + its time series.</div>
-    </div>
-  </details>
-  <footer>Study box 47.8&#8211;51.2 N, 129.5&#8211;122.5 W &#183; thresholds 1.4 / 2.8 mL/L &#183;
-    seasons use p10</footer>
+  <section>
+    <h2>Site confidence</h2>
+    <div class="row" id="conf-group"><label><input type="checkbox" name="conf" value="high" checked> High</label>
+<label><input type="checkbox" name="conf" value="medium" checked> Medium</label>
+<label><input type="checkbox" name="conf" value="low" checked> Low</label></div>
+  </section>
+  <footer>Study box 47.8&#8211;51.2 N, 129.5&#8211;122.5 W &#183; thresholds 1.4 / 2.8 mL/L</footer>
 </aside>
-<main id="map"></main>
+<main id="map-wrap">
+  <div id="map"></div>
+  <div class="map-ui">
+    <button id="fit-btn" title="Zoom to fit all visible data">&#8689; Fit
+      data</button>
+    <button id="legend-btn" aria-expanded="false"
+      title="Legend &amp; visibility">Legend &#9662;</button>
+    <div id="legend-panel" class="hidden">
+      <div class="lhead">Status classes <span class="lsub">(mL/L &#183;
+        click to hide/show)</span></div>
+      <div class="chips"><button class="chip" data-class="good" aria-pressed="true" title="Click to hide/show good points"><span class="sw" style="background:#2f9e44"></span>Good &#8805;2.8</button><button class="chip" data-class="at_risk" aria-pressed="true" title="Click to hide/show at risk points"><span class="sw" style="background:#f59f00"></span>At risk &lt;2.8</button><button class="chip" data-class="hypoxic" aria-pressed="true" title="Click to hide/show hypoxic points"><span class="sw" style="background:#e03131"></span>Hypoxic &lt;1.4</button><button class="chip" data-class="anoxic" aria-pressed="true" title="Click to hide/show anoxic points"><span class="sw" style="background:#5f3dc4"></span>Anoxic &lt;0.1</button><button class="chip" data-class="unclassified" aria-pressed="true" title="Click to hide/show unclassified points"><span class="sw" style="background:#868e96"></span>Unclassified</button></div>
+      <div class="lhead">Reading the markers</div>
+      <div class="lrow"><span class="ring cont"></span> big dark ring =
+        continuous sensor</div>
+      <div class="lrow"><span class="ring visit"></span> small white ring =
+        ship-visit station</div>
+      <div class="lrow">tiny dot = one cast (jittered &#177;&lt;1 km);
+        hollow grey = QC-suspect</div>
+      <div class="lrow"><span class="sw-line"></span> thin blue lines = GEBCO isobaths</div>
+      <div class="lrow">faded fill = lower confidence &#183; dashed = record
+        ended</div>
+      <div class="lrow">click any marker for stats + its time series</div>
+    </div>
+  </div>
+</main>
 <div id="detail" class="hidden">
   <button id="d-close" aria-label="Close">&#215;</button>
   <div id="d-body"></div>
