@@ -60,7 +60,7 @@
     var reliefLayer = null;
     if (VI.relief) {
       reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
-        {pane: "relief", opacity: 0.92,
+        {pane: "relief", opacity: 0.97,
          attribution: "GEBCO 2026 Grid (public domain)"}).addTo(map);
     }
 
@@ -68,22 +68,27 @@
       {color: "#557", weight: 1.2, dashArray: "6 4", fill: false,
        interactive: false}).addTo(map);
 
-    // ---- detail panel ----
+    // ---- detail dock (info left, time series right) ----
     var detail = document.getElementById("detail");
-    var dBody = document.getElementById("d-body");
+    var dInfo = document.getElementById("d-info");
+    var dChart = document.getElementById("d-chart");
     function openDetail(html, chartKey, hash) {
-      dBody.innerHTML = html;
-      var slot = dBody.querySelector("[data-chart]");
+      dInfo.innerHTML = html;
+      var slot = dInfo.querySelector("[data-chart]");
       var key = chartKey || (slot && slot.dataset.chart);
-      if (slot && key && VI.charts[key]) {
-        slot.innerHTML = VI.charts[key];
-        slot.style.minHeight = "0";
-      }
+      if (slot) slot.remove();
+      dChart.innerHTML = (key && VI.charts[key]) ? VI.charts[key]
+        : "<div class='nochart'>No time series for this point</div>";
       detail.classList.remove("hidden");
+      document.body.classList.add("detail-open");
+      map.invalidateSize();
+      setTimeout(function () { map.invalidateSize(); }, 180);
       if (hash !== undefined) location.hash = hash;
     }
     document.getElementById("d-close").onclick = function () {
       detail.classList.add("hidden");
+      document.body.classList.remove("detail-open");
+      map.invalidateSize();
       if (location.hash) history.replaceState(null, "",
         location.pathname + location.search);
     };
@@ -136,7 +141,7 @@
       mk.bindTooltip(c.s + " - " + c.t.slice(0, 10) + " - " +
         c.o.toFixed(2) + " mL/L (" + c.m + ")" +
         (c.q ? " - QC-suspect" : ""), {sticky: true});
-      mk.on("click", function () { openDetail(castHtml(c)); });
+      mk.on("click", function () { openDetail(castHtml(c), c.s); });
       return mk;
     });
     function castHtml(c) {

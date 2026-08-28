@@ -897,10 +897,31 @@ def bathy_relief(path: Path, out_png: Path, max_px: int = 1500):
     land_sh = ls.shade_rgb(np.tile(land, (*z.shape, 1)), np.clip(z, 0, None),
                            blend_mode="soft", vert_exag=.05)
     img = np.where((z >= 0)[..., None], land_sh, shaded)
+    if out_png.suffix.lower() == ".png":
+        # web overlay: land transparent (basemap shows through) + feathered
+        # edges so the image blends into the basemap instead of ending in a
+        # hard rectangle
+        alpha = np.where(z >= 0, 0.0, 1.0)
+        f = 42                                        # feather width, px
+        ny, nx = alpha.shape
+        ramp_y = np.clip(np.minimum(np.arange(ny), ny - 1 - np.arange(ny))
+                         / f, 0, 1)
+        ramp_x = np.clip(np.minimum(np.arange(nx), nx - 1 - np.arange(nx))
+                         / f, 0, 1)
+        alpha *= np.minimum.outer(ramp_y, ramp_x)
+        img = np.dstack([img, alpha])
     img = np.flipud(img)                                  # row 0 = north
-    kw = ({"pil_kwargs": {"quality": 88}}
-          if out_png.suffix.lower() in (".jpg", ".jpeg") else {})
-    plt.imsave(out_png, np.clip(img, 0, 1), **kw)
+    if out_png.suffix.lower() == ".png":
+        from PIL import Image
+        arr = (np.clip(img, 0, 1) * 255).astype("uint8")
+        pim = Image.fromarray(arr, "RGBA")
+        if pim.width > 1500:
+            pim = pim.resize((1500, round(pim.height * 1500 / pim.width)),
+                             Image.LANCZOS)
+        pim.save(out_png, optimize=True)
+    else:
+        plt.imsave(out_png, np.clip(img, 0, 1),
+                   pil_kwargs={"quality": 88})
     print(f"relief: {out_png.name} {img.shape[1]}x{img.shape[0]}px "
           f"({out_png.stat().st_size / 1e6:.1f} MB)")
     return [[float(lat.min()), float(lon.min())],

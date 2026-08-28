@@ -28,16 +28,18 @@
   <section>
     <h2>Status lens</h2>
     <div class="stack" id="lens-group">
-      <label title="10th percentile of daily near-bottom O&#8322; over the
-whole record &#8212; levels dip below this only ~10% of days. A stable
-&#8216;how low it typically gets&#8217;.">
+      <label data-tip="10th percentile of all daily near-bottom O&#8322;
+values &#8212; oxygen dips below this only ~10% of days. A stable measure
+of how low it typically gets.">
         <input type="radio" name="lens" value="exposure" checked>
-        Typical low <span class="hint">?</span></label>
-      <label title="The single lowest daily value ever recorded at the site
-&#8212; a one-day extreme, sensitive to outliers.">
+        Typical low <span class="hint" tabindex="0" aria-label="What is
+typical low?">?</span></label>
+      <label data-tip="The single lowest daily value ever recorded at the
+site &#8212; a one-day extreme, sensitive to outliers.">
         <input type="radio" name="lens" value="worst">
-        Worst case <span class="hint">?</span></label>
-      <label title="Same 10th-percentile idea, computed only within the
+        Worst case <span class="hint" tabindex="0" aria-label="What is
+worst case?">?</span></label>
+      <label data-tip="Same 10th-percentile idea, computed only within the
 chosen three-month season." class="lseason">
         <input type="radio" name="lens" value="seasonal"> Seasonal
         <select id="season-select" aria-label="Season"><option value="djf">Winter (DJF)</option>
@@ -110,9 +112,12 @@ chosen three-month season." class="lseason">
     </div>
   </div>
 </main>
-<div id="detail" class="hidden">
+<div id="detail" class="hidden" role="region" aria-label="Site details">
   <button id="d-close" aria-label="Close">&#215;</button>
-  <div id="d-body"></div>
+  <div class="d-cols">
+    <div id="d-info"></div>
+    <div id="d-chart"></div>
+  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
 </script>

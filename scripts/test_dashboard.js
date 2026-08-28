@@ -41,11 +41,21 @@ setTimeout(() => {
     el.dispatchEvent(new w.Event(type, { bubbles: true }));
 
   check("site markers on boot", marks(), VI.sites.length);
-  check("deep link opens detail",
+  check("deep link opens detail dock",
     !doc.getElementById("detail").classList.contains("hidden"), true);
-  check("deep link chart injected",
-    doc.querySelector("#d-body [data-chart]").innerHTML.startsWith("<svg"),
-    true);
+  check("dock resizes map (body.detail-open)",
+    doc.body.classList.contains("detail-open"), true);
+  check("dock chart pane holds the SVG",
+    doc.getElementById("d-chart").innerHTML.trim().startsWith("<svg"), true);
+  check("dock info pane has the stats table",
+    doc.getElementById("d-info").querySelector("table") !== null, true);
+  check("chart slot removed from info pane",
+    doc.getElementById("d-info").querySelector("[data-chart]"), null);
+  doc.getElementById("d-close").click();
+  check("close clears detail-open",
+    doc.body.classList.contains("detail-open"), false);
+  check("lens tooltips present",
+    doc.querySelectorAll("#lens-group label[data-tip]").length, 3);
   check("theme attribute set",
     ["light", "dark"].includes(
       doc.documentElement.getAttribute("data-theme")), true);

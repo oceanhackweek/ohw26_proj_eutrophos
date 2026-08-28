@@ -35,6 +35,13 @@ width:15px;height:15px}
 .hint{display:inline-flex;align-items:center;justify-content:center;
 width:15px;height:15px;border-radius:50%;background:var(--panel2);
 border:1px solid var(--line);color:var(--mut);font-size:10px;cursor:help}
+label[data-tip]{position:relative;cursor:help}
+label[data-tip]:hover::after,label[data-tip]:focus-within::after{
+content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:22px;
+width:236px;background:var(--panel);color:var(--ink);border:1px solid
+var(--accent);border-radius:10px;padding:9px 11px;font-size:12px;
+line-height:1.45;box-shadow:var(--shadow);z-index:2000;white-space:normal;
+pointer-events:none}
 .lseason select{margin-left:2px;padding:3px 6px;border:1px solid
 var(--line);border-radius:7px;background:var(--panel2);max-width:150px}
 #search{width:100%;padding:8px 10px;border:1px solid var(--line);
@@ -78,13 +85,23 @@ box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 background:#b6c9d8;vertical-align:-1px;margin-right:3px}
 .ring.cont{border:2.5px solid #333}
 .ring.visit{border:1.5px solid #fff;box-shadow:0 0 0 1px #8aa}
-#detail{position:fixed;top:96px;right:12px;width:432px;
-max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);overflow:auto;
-background:var(--panel);border:1px solid var(--line);border-radius:13px;
-box-shadow:var(--shadow);padding:14px 16px;z-index:1200;color:var(--ink)}
+#detail{position:fixed;left:var(--sbw);right:0;bottom:0;height:312px;
+background:var(--panel);border-top:1px solid var(--line);
+box-shadow:0 -10px 28px rgba(6,20,32,.28);padding:12px 46px 10px 16px;
+z-index:1150;color:var(--ink)}
+body.detail-open #map-wrap{bottom:312px}
+.d-cols{display:flex;gap:18px;height:100%}
+#d-info{width:344px;min-width:290px;overflow:auto;padding-right:8px;
+border-right:1px solid var(--line)}
+#d-chart{flex:1;display:flex;align-items:center;justify-content:center;
+min-width:0}
+#d-chart svg{width:100%;height:100%;max-height:280px}
+#d-chart .nochart{color:var(--mut);font-size:13px}
 #detail table td{color:var(--ink)}
-#d-close{position:absolute;top:6px;right:8px;border:0;background:none;
-font-size:20px;cursor:pointer;color:var(--mut)}
+#d-close{position:absolute;top:8px;right:12px;border:1px solid
+var(--line);border-radius:8px;background:var(--panel2);width:28px;
+height:28px;font-size:16px;cursor:pointer;color:var(--mut)}
+#d-close:hover{border-color:var(--accent);color:var(--ink)}
 .hidden{display:none!important}
 #sb-toggle{display:none;position:fixed;top:10px;left:10px;z-index:1300;
 width:38px;height:38px;border:1px solid var(--line);border-radius:10px;
@@ -92,6 +109,7 @@ background:var(--panel);font-size:17px;cursor:pointer;
 box-shadow:var(--shadow)}
 html[data-theme=dark] .leaflet-container{background:#0a1826}
 html[data-theme=dark] #detail div[style*='font-family']{color:var(--ink)}
+html[data-theme=dark] #d-chart svg text{fill:#dbe9f2}
 html[data-theme=dark] #d-body td[style*='color:#666']{color:#8fabc1!important}
 html[data-theme=dark] #d-body div[style*='color:#888']{color:#8fabc1!important}
 @media(max-width:880px){
@@ -101,5 +119,9 @@ box-shadow:var(--shadow)}
 #sidebar.open{transform:none}
 #sb-toggle{display:block}
 .map-ui{top:10px;right:10px}
-#detail{top:auto;bottom:12px;right:12px;left:12px;width:auto;
-max-height:60vh}}
+#detail{left:0;height:56vh;padding:10px 44px 8px 12px}
+body.detail-open #map-wrap{bottom:56vh}
+.d-cols{flex-direction:column;gap:10px}
+#d-info{width:auto;min-width:0;order:2;flex:1;border-right:0;
+border-top:1px solid var(--line);padding-top:8px}
+#d-chart{order:1;min-height:150px;max-height:40%}}

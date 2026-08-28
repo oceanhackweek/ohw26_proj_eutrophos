@@ -190,16 +190,18 @@ def index_html(vi: dict) -> str:
   <section>
     <h2>Status lens</h2>
     <div class="stack" id="lens-group">
-      <label title="10th percentile of daily near-bottom O&#8322; over the
-whole record &#8212; levels dip below this only ~10% of days. A stable
-&#8216;how low it typically gets&#8217;.">
+      <label data-tip="10th percentile of all daily near-bottom O&#8322;
+values &#8212; oxygen dips below this only ~10% of days. A stable measure
+of how low it typically gets.">
         <input type="radio" name="lens" value="exposure" checked>
-        Typical low <span class="hint">?</span></label>
-      <label title="The single lowest daily value ever recorded at the site
-&#8212; a one-day extreme, sensitive to outliers.">
+        Typical low <span class="hint" tabindex="0" aria-label="What is
+typical low?">?</span></label>
+      <label data-tip="The single lowest daily value ever recorded at the
+site &#8212; a one-day extreme, sensitive to outliers.">
         <input type="radio" name="lens" value="worst">
-        Worst case <span class="hint">?</span></label>
-      <label title="Same 10th-percentile idea, computed only within the
+        Worst case <span class="hint" tabindex="0" aria-label="What is
+worst case?">?</span></label>
+      <label data-tip="Same 10th-percentile idea, computed only within the
 chosen three-month season." class="lseason">
         <input type="radio" name="lens" value="seasonal"> Seasonal
         <select id="season-select" aria-label="Season">{season_opts}</select>
@@ -267,9 +269,12 @@ chosen three-month season." class="lseason">
     </div>
   </div>
 </main>
-<div id="detail" class="hidden">
+<div id="detail" class="hidden" role="region" aria-label="Site details">
   <button id="d-close" aria-label="Close">&#215;</button>
-  <div id="d-body"></div>
+  <div class="d-cols">
+    <div id="d-info"></div>
+    <div id="d-chart"></div>
+  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
 </script>
@@ -317,6 +322,13 @@ width:15px;height:15px}
 .hint{display:inline-flex;align-items:center;justify-content:center;
 width:15px;height:15px;border-radius:50%;background:var(--panel2);
 border:1px solid var(--line);color:var(--mut);font-size:10px;cursor:help}
+label[data-tip]{position:relative;cursor:help}
+label[data-tip]:hover::after,label[data-tip]:focus-within::after{
+content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:22px;
+width:236px;background:var(--panel);color:var(--ink);border:1px solid
+var(--accent);border-radius:10px;padding:9px 11px;font-size:12px;
+line-height:1.45;box-shadow:var(--shadow);z-index:2000;white-space:normal;
+pointer-events:none}
 .lseason select{margin-left:2px;padding:3px 6px;border:1px solid
 var(--line);border-radius:7px;background:var(--panel2);max-width:150px}
 #search{width:100%;padding:8px 10px;border:1px solid var(--line);
@@ -360,13 +372,23 @@ box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 background:#b6c9d8;vertical-align:-1px;margin-right:3px}
 .ring.cont{border:2.5px solid #333}
 .ring.visit{border:1.5px solid #fff;box-shadow:0 0 0 1px #8aa}
-#detail{position:fixed;top:96px;right:12px;width:432px;
-max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);overflow:auto;
-background:var(--panel);border:1px solid var(--line);border-radius:13px;
-box-shadow:var(--shadow);padding:14px 16px;z-index:1200;color:var(--ink)}
+#detail{position:fixed;left:var(--sbw);right:0;bottom:0;height:312px;
+background:var(--panel);border-top:1px solid var(--line);
+box-shadow:0 -10px 28px rgba(6,20,32,.28);padding:12px 46px 10px 16px;
+z-index:1150;color:var(--ink)}
+body.detail-open #map-wrap{bottom:312px}
+.d-cols{display:flex;gap:18px;height:100%}
+#d-info{width:344px;min-width:290px;overflow:auto;padding-right:8px;
+border-right:1px solid var(--line)}
+#d-chart{flex:1;display:flex;align-items:center;justify-content:center;
+min-width:0}
+#d-chart svg{width:100%;height:100%;max-height:280px}
+#d-chart .nochart{color:var(--mut);font-size:13px}
 #detail table td{color:var(--ink)}
-#d-close{position:absolute;top:6px;right:8px;border:0;background:none;
-font-size:20px;cursor:pointer;color:var(--mut)}
+#d-close{position:absolute;top:8px;right:12px;border:1px solid
+var(--line);border-radius:8px;background:var(--panel2);width:28px;
+height:28px;font-size:16px;cursor:pointer;color:var(--mut)}
+#d-close:hover{border-color:var(--accent);color:var(--ink)}
 .hidden{display:none!important}
 #sb-toggle{display:none;position:fixed;top:10px;left:10px;z-index:1300;
 width:38px;height:38px;border:1px solid var(--line);border-radius:10px;
@@ -374,6 +396,7 @@ background:var(--panel);font-size:17px;cursor:pointer;
 box-shadow:var(--shadow)}
 html[data-theme=dark] .leaflet-container{background:#0a1826}
 html[data-theme=dark] #detail div[style*='font-family']{color:var(--ink)}
+html[data-theme=dark] #d-chart svg text{fill:#dbe9f2}
 html[data-theme=dark] #d-body td[style*='color:#666']{color:#8fabc1!important}
 html[data-theme=dark] #d-body div[style*='color:#888']{color:#8fabc1!important}
 @media(max-width:880px){
@@ -383,8 +406,12 @@ box-shadow:var(--shadow)}
 #sidebar.open{transform:none}
 #sb-toggle{display:block}
 .map-ui{top:10px;right:10px}
-#detail{top:auto;bottom:12px;right:12px;left:12px;width:auto;
-max-height:60vh}}
+#detail{left:0;height:56vh;padding:10px 44px 8px 12px}
+body.detail-open #map-wrap{bottom:56vh}
+.d-cols{flex-direction:column;gap:10px}
+#d-info{width:auto;min-width:0;order:2;flex:1;border-right:0;
+border-top:1px solid var(--line);padding-top:8px}
+#d-chart{order:1;min-height:150px;max-height:40%}}
 """
 
 
@@ -450,7 +477,7 @@ APP_JS = r"""(function () {
     var reliefLayer = null;
     if (VI.relief) {
       reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
-        {pane: "relief", opacity: 0.92,
+        {pane: "relief", opacity: 0.97,
          attribution: "GEBCO 2026 Grid (public domain)"}).addTo(map);
     }
 
@@ -458,22 +485,27 @@ APP_JS = r"""(function () {
       {color: "#557", weight: 1.2, dashArray: "6 4", fill: false,
        interactive: false}).addTo(map);
 
-    // ---- detail panel ----
+    // ---- detail dock (info left, time series right) ----
     var detail = document.getElementById("detail");
-    var dBody = document.getElementById("d-body");
+    var dInfo = document.getElementById("d-info");
+    var dChart = document.getElementById("d-chart");
     function openDetail(html, chartKey, hash) {
-      dBody.innerHTML = html;
-      var slot = dBody.querySelector("[data-chart]");
+      dInfo.innerHTML = html;
+      var slot = dInfo.querySelector("[data-chart]");
       var key = chartKey || (slot && slot.dataset.chart);
-      if (slot && key && VI.charts[key]) {
-        slot.innerHTML = VI.charts[key];
-        slot.style.minHeight = "0";
-      }
+      if (slot) slot.remove();
+      dChart.innerHTML = (key && VI.charts[key]) ? VI.charts[key]
+        : "<div class='nochart'>No time series for this point</div>";
       detail.classList.remove("hidden");
+      document.body.classList.add("detail-open");
+      map.invalidateSize();
+      setTimeout(function () { map.invalidateSize(); }, 180);
       if (hash !== undefined) location.hash = hash;
     }
     document.getElementById("d-close").onclick = function () {
       detail.classList.add("hidden");
+      document.body.classList.remove("detail-open");
+      map.invalidateSize();
       if (location.hash) history.replaceState(null, "",
         location.pathname + location.search);
     };
@@ -526,7 +558,7 @@ APP_JS = r"""(function () {
       mk.bindTooltip(c.s + " - " + c.t.slice(0, 10) + " - " +
         c.o.toFixed(2) + " mL/L (" + c.m + ")" +
         (c.q ? " - QC-suspect" : ""), {sticky: true});
-      mk.on("click", function () { openDetail(castHtml(c)); });
+      mk.on("click", function () { openDetail(castHtml(c), c.s); });
       return mk;
     });
     function castHtml(c) {
@@ -759,9 +791,9 @@ def main() -> int:
     if bathy_path:
         (OUT_DIR / "assets").mkdir(parents=True, exist_ok=True)
         rb = core.bathy_relief(bathy_path,
-                               OUT_DIR / "assets" / "gebco_relief.jpg")
+                               OUT_DIR / "assets" / "gebco_relief.png")
         if rb:
-            relief = {"url": "assets/gebco_relief.jpg", "bounds": rb}
+            relief = {"url": "assets/gebco_relief.png", "bounds": rb}
 
     yrs = ([c["y"] for c in casts_rec] or [2019, date.today().year])
     vi = {
