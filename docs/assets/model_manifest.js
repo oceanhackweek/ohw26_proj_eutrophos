@@ -9,9 +9,9 @@ const MODEL_MANIFEST = {
    -122.00625
   ]
  ],
- "model_version": "hgb_quantile_v1",
+ "model_version": "hgb_quantile_v1.1",
  "value_mode": "continuous_ml_l",
- "made": "2026-08-28T16:02:32+00:00",
+ "made": "2026-08-28T17:52:38+00:00",
  "frames": [
   {
    "id": "djf",

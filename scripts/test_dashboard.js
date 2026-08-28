@@ -282,8 +282,13 @@ setTimeout(() => {
   if (VI.modelSeries) {
     check("no separate model layer control",
       doc.getElementById("ck-model"), null);
-    check("model series shipped for all CF stations",
-      Object.keys(VI.modelSeries).length, 27);
+    check("model series cover the full station set",
+      Object.keys(VI.modelSeries).length, 284);
+    check("DFO stations carry bands too",
+      Object.keys(VI.modelSeries)
+        .filter(k => k.startsWith("DFO")).length > 200, true);
+    check("bands are v1.1 calibrated",
+      VI.modelSeries.CF001.v, "hgb_quantile_v1.1");
     // open a modeled site: chart must show band + dashed line + caption
     const mc = Object.keys(VI.modelSeries).sort()[0];
     const si = doc.getElementById("search");
