@@ -489,11 +489,14 @@ def add_markers(group, df, class_col, charts, casts=None,
 
 # -- individual-cast layer (priority 2) --------------------------------------
 def _jitter(i: int) -> tuple[float, float]:
+    """Time-ordered Archimedean spiral: cast 0 (oldest) sits near the
+    station centre and later casts wind outward, so radial position reads
+    as chronology (~7 casts per turn, out to ~600 m)."""
     """Deterministic golden-angle spiral (deg). Casts carry only the station's
     nominal coordinate, so identical points would hide each other; the spiral
     spreads them ~100-800 m and is disclosed in tooltip + legend."""
-    ang = i * 2.399963229728653
-    rad = 0.0018 + 0.00055 * math.sqrt(i)
+    ang = i * 0.9
+    rad = 0.0012 + 0.00012 * ang
     return rad * math.sin(ang), rad * math.cos(ang) / 0.66   # dlat, dlon @49N
 
 

@@ -170,9 +170,12 @@ def gap_fill(table: pd.DataFrame, X_cols: list[str], stations_mode: str = "cf",
         quantile_models[tag] = m
 
     sel = table["source"] == "ONC_CF"
-    if stations_mode == "cf+dfo":
+    if stations_mode in ("cf+dfo", "all"):
         counts = table[table["source"] == "DFO_CAST"].groupby("site_code").size()
         sel |= table["site_code"].isin(counts[counts >= min_casts].index)
+    if stations_mode == "all":
+        # continuous sites too: the band spans their deployment gaps
+        sel |= table["source"].isin(["ONC", "DFO_MOOR"])
     stations = (table[sel]
                 .groupby("site_code")
                 .agg(region=("region", "first"), lat=("lat", "median"),
@@ -220,7 +223,7 @@ def gap_fill(table: pd.DataFrame, X_cols: list[str], stations_mode: str = "cf",
 def main() -> int:
     p = argparse.ArgumentParser(description="Train the oxygen model.")
     p.add_argument("--skip-predictions", action="store_true")
-    p.add_argument("--stations", choices=["cf", "cf+dfo"], default="cf+dfo")
+    p.add_argument("--stations", choices=["cf", "cf+dfo", "all"], default="all")
     p.add_argument("--min-casts", type=int, default=3)
     p.add_argument("--cadence", choices=["daily", "weekly"], default="weekly")
     args = p.parse_args()

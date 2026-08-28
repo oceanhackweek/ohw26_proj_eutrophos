@@ -164,6 +164,38 @@ def series_records(cls, daily) -> dict:
     return out
 
 
+def model_station_index(model, cls, casts) -> dict:
+    """{code: [lat, lon, kind, pred_p10_class]} for every modeled station.
+    kind: onc_cf | dfo | continuous. Coordinates come from the site index
+    when the code is a classified site, else the median cast position,
+    else parsed from a DFO_/DFOM_ style code."""
+    if model is None:
+        return {}
+    out = {}
+    site_ix = cls.set_index("site_code")[["lat", "lon"]]
+    cast_ix = (casts.groupby("site_code")[["lat", "lon"]].median()
+               if casts is not None and len(casts) else None)
+    m = model[model["site_code"].notna()]
+    for code, g in m.groupby("site_code"):
+        code = str(code)
+        kind = ("onc_cf" if code.startswith("CF")
+                else "dfo" if code.startswith("DFO_") else "continuous")
+        if code in site_ix.index:
+            lat, lon = site_ix.loc[code]
+        elif cast_ix is not None and code in cast_ix.index:
+            lat, lon = cast_ix.loc[code]
+        else:
+            try:
+                _, la, lo = code.split("_")[:3]
+                lat, lon = float(la), -float(lo.rstrip("W"))
+            except Exception:
+                print(f"model station {code}: no coordinates, skipped")
+                continue
+        cv = core.class_of(g["o2_pred_ml_l"].quantile(.1))
+        out[code] = [round(float(lat), 5), round(float(lon), 5), kind, cv]
+    return out
+
+
 def model_series_records(model: pd.DataFrame | None) -> dict:
     """Weekly-mean predicted series per site for the dock chart:
     {code: {v: version, p: [[days_epoch, pred, lo, hi], ...]}}"""
@@ -183,6 +215,37 @@ def model_series_records(model: pd.DataFrame | None) -> dict:
                   for t, r in w.iterrows()],
         }
     return out
+
+
+def coast_multilines(path) -> list | None:
+    """0 m contour from the GEBCO grid: a coastline that can be drawn on
+    top of the modeled surface so land/water stays readable."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from netCDF4 import Dataset
+    except ImportError:
+        return None
+    import numpy as np
+    with Dataset(path) as ds:
+        lat, lon, z = ds["lat"][:], ds["lon"][:], ds["elevation"][:]
+    B = core.BOX
+    mlat = (lat >= B["s"] - .2) & (lat <= B["n"] + .2)
+    mlon = (lon >= B["w"] - .2) & (lon <= B["e"] + .2)
+    lat, lon, z = lat[mlat], lon[mlon], np.asarray(z)[mlat][:, mlon]
+    step = max(1, int(max(len(lat), len(lon)) / 900))
+    lat, lon, z = lat[::step], lon[::step], z[::step, ::step]
+    fig = plt.figure()
+    cs = plt.contour(lon, lat, z, levels=[0])
+    plt.close(fig)
+    lines = []
+    for seg in cs.allsegs[0]:
+        seg = seg[::3] if len(seg) > 30 else seg
+        if len(seg) >= 10:
+            lines.append([[round(float(x), 3), round(float(y), 3)]
+                          for x, y in seg])
+    return lines or None
 
 
 # -- static assets -----------------------------------------------------------
@@ -227,6 +290,14 @@ def index_html(vi: dict) -> str:
     year_opts1 = "".join(
         f'<option value="{y}"{" selected" if y == y1 else ""}>{y}</option>'
         for y in range(y0, y1 + 1))
+    modelst_ctl = ('<label data-tip="Hollow triangles mark every station '
+                   'the model predicts at. Click one for its median + 80% '
+                   'band, drawn with the station&#8217;s own casts on top. '
+                   'Everything about them is modeled, never observed.">'
+                   '<input type="checkbox" id="ck-modelst"> Modeled '
+                   'stations <span class="hint" tabindex="0" aria-label='
+                   '"What are modeled stations?">?</span></label>'
+                   if vi.get("modelStations") else "")
     relief_ctl = ('<label title="Hillshaded GEBCO grid drawn over the '
                   'basemap"><input type="checkbox" id="ck-relief" checked> '
                   'GEBCO shaded relief</label>' if vi.get("relief") else "")
@@ -234,6 +305,12 @@ def index_html(vi: dict) -> str:
                  'Isobaths (100&#8211;2000 m)</label>'
                  if vi.get("bathy") else "")
 
+    modelst_leg = (_g('<polygon points="13,4.5 22.5,21 3.5,21" '
+                      'fill="rgba(255,255,255,.25)" stroke="#0e7c9c" '
+                      'stroke-width="2.2"/>', "Modeled station",
+                      "hollow triangle &#183; stroke = predicted p10 "
+                      "status; never an observation")
+                   if vi.get("modelStations") else "")
     model_leg = (_g('<rect x="2" y="8" width="22" height="10" '
                     'fill="#868e96" opacity=".25"/>'
                     '<line x1="2" y1="13" x2="24" y2="13" stroke="#495057" '
@@ -262,7 +339,8 @@ def index_html(vi: dict) -> str:
            "ONC Community Fishers station",
            "triangle &#183; sampled by ship visits"),
         _g(f'<circle cx="13" cy="13" r="3.2" fill="{G}" stroke="#fff" '
-           f'stroke-width="1"/>', "ONC CTD cast", "small circle"),
+           f'stroke-width="1"/>', "ONC CTD cast",
+           "small circle &#183; station casts spiral out, oldest at centre"),
         _g(f'<rect x="9.8" y="9.8" width="6.4" height="6.4" fill="{G}" '
            f'stroke="#fff" stroke-width="1"/>', "DFO CTD cast",
            "small square"),
@@ -352,6 +430,7 @@ always draw on top."><input type="checkbox" id="ck-surface">
           aria-label="What is the modeled surface?">?</span></label>
         <select id="surface-frame" aria-label="Surface frame"></select>
       </div>
+      {modelst_ctl}
       <label><input type="checkbox" id="ck-casts" checked>
         CTD casts</label>
       <div id="cast-filters" class="indent">
@@ -398,7 +477,7 @@ statistics; untick to hide them from the map too.">
       <div class="chips">{chips}</div>
       <div class="lhead">What the markers mean</div>
       {glyph_rows}
-      {model_leg}{bathy_leg}
+      {modelst_leg}{model_leg}{bathy_leg}
       <div class="lfoot">ONC = Ocean Networks Canada &#183; DFO =
         Fisheries and Oceans Canada. Click any marker to open its stats
         and full time series below the map.</div>
@@ -559,6 +638,10 @@ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .clab.red{fill:#e03131}.clab.amber{fill:#f59f00}
 .cend{text-anchor:end}.cmid{text-anchor:middle}.cmut{opacity:.75}
 .creset{fill:var(--accent);cursor:pointer;font-weight:700}
+path.map-scrim{fill:#eef6f9;fill-opacity:.78;stroke:none}
+html[data-theme=dark] path.map-scrim{fill:#0a1826;fill-opacity:.8}
+path.coastline{stroke:#31485c;fill:none}
+html[data-theme=dark] path.coastline{stroke:#cfe0ec}
 .cmband{fill:#495057;opacity:.15;stroke:none}
 html[data-theme=dark] .cmband{fill:#b7cbdb;opacity:.18}
 .cmline{stroke:#495057;stroke-width:1.8;stroke-dasharray:6 4}
@@ -751,25 +834,6 @@ APP_JS = r"""(function () {
         el("text", {x: W - MR + 5, y: Y(t) + 4,
           "class": "clab " + (i ? "amber" : "red")}).textContent = t;
       });
-      // line segments (gap-split)
-      var seg = [];
-      function flush() {
-        if (seg.length > 1) {
-          el("polyline", {fill: "none", points: seg.map(function (p) {
-            return X(p.d) + "," + Y(p.v);
-          }).join(" "), "class": "cline"});
-        } else if (seg.length === 1) {
-          el("circle", {cx: X(seg[0].d), cy: Y(seg[0].v), r: 2,
-            "class": "cline-dot"});
-        }
-        seg = [];
-      }
-      pts.forEach(function (p) {
-        if (p.d < x0 || p.d > x1) { flush(); return; }
-        if (seg.length && p.d - seg[seg.length - 1].d > gap) flush();
-        seg.push(p);
-      });
-      flush();
       // model band + dashed prediction line (never confusable with obs)
       if (mod.length) {
         var mvis = mod.filter(function (p) {
@@ -789,6 +853,25 @@ APP_JS = r"""(function () {
           }).join(" "), "class": "cmline"});
         }
       }
+      // line segments (gap-split)
+      var seg = [];
+      function flush() {
+        if (seg.length > 1) {
+          el("polyline", {fill: "none", points: seg.map(function (p) {
+            return X(p.d) + "," + Y(p.v);
+          }).join(" "), "class": "cline"});
+        } else if (seg.length === 1) {
+          el("circle", {cx: X(seg[0].d), cy: Y(seg[0].v), r: 2,
+            "class": "cline-dot"});
+        }
+        seg = [];
+      }
+      pts.forEach(function (p) {
+        if (p.d < x0 || p.d > x1) { flush(); return; }
+        if (seg.length && p.d - seg[seg.length - 1].d > gap) flush();
+        seg.push(p);
+      });
+      flush();
       // cast dots
       casts.forEach(function (c) {
         if (c.d < x0 || c.d > x1) return;
@@ -798,28 +881,52 @@ APP_JS = r"""(function () {
           : {cx: X(c.d), cy: Y(c.v), r: 3.4, fill: colors[c.c],
              "class": "ccast"});
       });
-      // captions: lens (left), sampling kind or reset (right), hint (btm)
+      // captions: lens (left), glyph key (right), hint + reset (bottom)
       if (data.lens)
         el("text", {x: ML, y: MT - 8, "class": "clab lens-cap"})
           .textContent = "Lens: " + data.lens;
-      if (x0 > d0 || x1 < d1) {
-        var rb = el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
-          "class": "clab creset"});
-        rb.textContent = "[reset zoom]";
-        rb.addEventListener("click", function () {
-          x0 = d0; x1 = d1; render();
+      var kx = W - MR;
+      function keyItem(label, glyph) {
+        var t = el("text", {x: kx, y: MT - 8, "text-anchor": "end",
+          "class": "clab"});
+        t.textContent = label;
+        kx -= label.length * 6.6 + 6;
+        glyph(kx);
+        kx -= 24;
+      }
+      if (data.model) {
+        keyItem("model median", function (x) {
+          el("line", {x1: x - 18, x2: x, y1: MT - 12, y2: MT - 12,
+            "class": "cmline"});
         });
-      } else {
-        el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
-          "class": "clab cend cmut"})
-          .textContent = (data.series
-            ? (data.series.k === "w" ? "weekly means" : "daily values")
-            : "individual casts") +
-            (data.model ? " \u00b7 modeled (dashed + band)" : "");
+        keyItem("80% band", function (x) {
+          el("rect", {x: x - 18, y: MT - 17, width: 18, height: 10,
+            "class": "cmband"});
+        });
+      }
+      if (casts.length) {
+        keyItem("casts (status color)", function (x) {
+          el("circle", {cx: x - 9, cy: MT - 12, r: 3.4,
+            fill: colors.good, "class": "ccast"});
+        });
+      }
+      if (pts.length) {
+        keyItem(data.series.k === "w" ? "observed (weekly)"
+          : "observed (daily)", function (x) {
+          el("line", {x1: x - 18, x2: x, y1: MT - 12, y2: MT - 12,
+            "class": "cline"});
+        });
       }
       el("text", {x: W - MR, y: H - 7, "text-anchor": "end",
         "class": "clab cmut"})
         .textContent = "drag to zoom \u00b7 double-click resets";
+      if (x0 > d0 || x1 < d1) {
+        var rb = el("text", {x: ML, y: H - 7, "class": "clab creset"});
+        rb.textContent = "[reset zoom]";
+        rb.addEventListener("click", function () {
+          x0 = d0; x1 = d1; render();
+        });
+      }
       // interaction layers
       var cross = el("line", {x1: 0, x2: 0, y1: MT, y2: H - MB,
         "class": "ccross hiddenattr"});
@@ -860,8 +967,8 @@ APP_JS = r"""(function () {
         focus.classList.remove("hiddenattr");
         tip.innerHTML = "<b>" + (n.t || fmtDate(n.d)) + "</b> \u00b7 " +
           (n.mo
-            ? "modeled " + n.v.toFixed(2) + " (" + n.lo.toFixed(2) +
-              "\u2013" + n.hi.toFixed(2) + ") mL/L"
+            ? "model median " + n.v.toFixed(2) + " \u00b7 80% band " +
+              n.lo.toFixed(2) + "\u2013" + n.hi.toFixed(2) + " mL/L"
             : n.v.toFixed(2) + " mL/L" +
               (n.c ? " \u00b7 " + (n.q ? "QC-suspect cast" : "cast") : ""));
         tip.classList.remove("hidden");
@@ -943,8 +1050,10 @@ APP_JS = r"""(function () {
     bases.ocean.addTo(map);
 
     map.createPane("relief").style.zIndex = 350;
+    map.createPane("scrim").style.zIndex = 300;     // fades the basemap
     map.createPane("surface").style.zIndex = 360;   // above relief, below
                                                     // isobaths + cast dots
+    map.createPane("coast").style.zIndex = 365;     // coastline over surface
     var reliefLayer = null;
     if (VI.relief) {
       reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
@@ -1119,9 +1228,10 @@ APP_JS = r"""(function () {
       if (c.q) h += "<div class='i-note warn'><b>QC-flagged:</b> reads " +
         "above the plausible range for this site; shown hollow and " +
         "excluded from all statistics.</div>";
-      if (c.j) h += "<div class='i-note info'>Dot position jittered " +
-        "~100\u2013800 m; all casts at this station share one nominal " +
-        "coordinate.</div>";
+      if (c.j) h += "<div class='i-note info'>All casts at this " +
+        "station share one nominal coordinate, so dots are arranged in " +
+        "a time-ordered spiral (oldest at the centre, newest ~600 m " +
+        "out).</div>";
       return h;
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
@@ -1160,23 +1270,110 @@ APP_JS = r"""(function () {
         o.textContent = f.label;
         surfaceSel.appendChild(o);
       });
+      // while the surface is on, fade the basemap and draw the coastline
+      // so the frame's colors never fight the map's own greens
+      var scrimLayer = L.rectangle([[40, -145], [58, -105]],
+        {pane: "scrim", stroke: false, fill: true, fillOpacity: 1,
+         interactive: false, className: "map-scrim"});
+      var coastLayer = VI.coast ? L.geoJSON(
+        {type: "Feature", properties: {},
+         geometry: {type: "MultiLineString", coordinates: VI.coast}},
+        {pane: "coast", interactive: false,
+         style: {weight: 1, opacity: .9, fill: false,
+                 className: "coastline"}}) : null;
       var showSurface = function () {
         if (surfaceLayer) map.removeLayer(surfaceLayer);
         surfaceLayer = L.imageOverlay("model_grid/" + surfaceSel.value,
           MODEL_MANIFEST.bounds,
-          {pane: "surface", opacity: 0.85,
+          {pane: "surface", opacity: 0.9,
            attribution: "Modeled \u00b7 " + MODEL_MANIFEST.model_version});
         surfaceLayer.addTo(map);
+        scrimLayer.addTo(map);
+        if (coastLayer) coastLayer.addTo(map);
+      };
+      var hideSurface = function () {
+        if (surfaceLayer) map.removeLayer(surfaceLayer);
+        map.removeLayer(scrimLayer);
+        if (coastLayer) map.removeLayer(coastLayer);
       };
       var ckS = document.getElementById("ck-surface");
       ckS.addEventListener("change", function (e) {
         if (e.target.checked) showSurface();
-        else if (surfaceLayer) map.removeLayer(surfaceLayer);
+        else hideSurface();
       });
       surfaceSel.addEventListener("change", function () {
         if (ckS.checked) showSurface();
       });
     }
+
+    // ---- modeled-station triangles (hollow; toggle, default off) ----
+    var byCode = {};
+    VI.sites.forEach(function (s) { byCode[s.code] = s; });
+    var modeledLayer = L.layerGroup();
+    var KIND_LABEL = {dfo: "DFO cast station",
+      continuous: "continuous site", onc_cf: "ONC CF station"};
+    function modIcon(cls) {
+      var col = VI.colors[cls] || VI.colors.unclassified;
+      return L.divIcon({html: "<svg width='22' height='22' xmlns='" +
+        "http://www.w3.org/2000/svg'><polygon points='11,3.5 19.5,18.5 " +
+        "2.5,18.5' fill='rgba(255,255,255,.28)' stroke='" + col +
+        "' stroke-width='2.2'/></svg>",
+        className: "", iconSize: [22, 22], iconAnchor: [11, 11]});
+    }
+    function modStationHtml(code, kind, cls, nCasts) {
+      return "<div class='i-h'>" + code +
+        " <span class='tt-b'>MODELED</span></div>" +
+        "<div class='i-subh'>" + (KIND_LABEL[kind] || kind) +
+        " \u00b7 hgb_quantile_v1.1</div>" +
+        "<div class='i-sec'><div class='i-lab'>Predicted status</div>" +
+        "<div class='i-pills'><span class='i-pill'><span class='i-dot' " +
+        "style='background:" + (VI.colors[cls] || "#868e96") + "'></span>" +
+        "Typical low (pred p10): <b>" + (VI.labels[cls] || "\u2013") +
+        "</b></span></div></div>" +
+        "<div class='i-sec'><div class='i-lab'>Observed here</div>" +
+        "<div class='i-row'>" + nCasts + " CTD cast" +
+        (nCasts === 1 ? "" : "s") + " (drawn on the chart)</div></div>" +
+        "<div class='i-note info'>Every value from this marker is a " +
+        "<b>model prediction</b>. The chart shows the model median " +
+        "(dashed) with its calibrated 80% band; the station's real casts " +
+        "sit on top.</div>";
+    }
+    if (VI.modelStations) {
+      Object.keys(VI.modelStations).forEach(function (code) {
+        var st = VI.modelStations[code];
+        var kind = st[2], cls = st[3];
+        if (kind === "onc_cf") return;              // site triangle exists
+        if (kind === "continuous" && byCode[code]) return;  // circle exists
+        var mk = L.marker([st[0], st[1]],
+          {icon: modIcon(cls), keyboard: false});
+        mk.bindTooltip("<div class='tt-h'>" + code +
+          " <span class='tt-b'>MODELED</span></div>" +
+          "<div class='tt-r'><span class='tt-dot' style='background:" +
+          (VI.colors[cls] || "#868e96") + "'></span>" +
+          (VI.labels[cls] || "") +
+          " <span class='tt-mut'>(pred p10 \u00b7 v1.1)</span></div>",
+          {sticky: true, className: "vi-tt"});
+        mk.on("click", function () {
+          var n = VI.casts.filter(function (c) {
+            return c.s === code;
+          }).length;
+          openDetail(modStationHtml(code, kind, cls, n), code,
+            undefined, [st[0], st[1]]);
+        });
+        modeledLayer.addLayer(mk);
+      });
+      var ckM = document.getElementById("ck-modelst");
+      if (ckM) ckM.addEventListener("change", function (e) {
+        if (e.target.checked) modeledLayer.addTo(map);
+        else map.removeLayer(modeledLayer);
+      });
+    }
+    H._openModeled = function (code) {
+      var st = VI.modelStations[code];
+      openDetail(modStationHtml(code, st[2], st[3],
+        VI.casts.filter(function (c) { return c.s === code; }).length),
+        code, undefined, [st[0], st[1]]);
+    };
 
     // ---- fit-to-data ----
     function fitData() {
@@ -1309,8 +1506,6 @@ APP_JS = r"""(function () {
     });
 
     // ---- search + deep link ----
-    var byCode = {};
-    VI.sites.forEach(function (s) { byCode[s.code] = s; });
     document.getElementById("search").addEventListener("change",
       function (e) {
         var code = e.target.value.split(" - ")[0].trim().toUpperCase();
@@ -1334,7 +1529,9 @@ APP_JS = r"""(function () {
 
     H.counts = function () {
       return {sites: siteLayer.getLayers().length,
-              casts: castLayer.getLayers().length};
+              casts: castLayer.getLayers().length,
+              modeled: map.hasLayer(modeledLayer)
+                ? modeledLayer.getLayers().length : 0};
     };
     document.getElementById("sb-toggle").onclick = function () {
       document.getElementById("sidebar").classList.toggle("open");
@@ -1385,8 +1582,10 @@ def main() -> int:
     series = series_records(cls, daily)
     casts_rec = cast_records(casts)
     mseries = model_series_records(model)
+    mstations = model_station_index(model, cls, casts)
     bathy_path = core.find_bathy(d)
     bathy = core.bathy_multilines(bathy_path) if bathy_path else None
+    coast = coast_multilines(bathy_path) if bathy_path else None
     relief = None
     if bathy_path:
         (OUT_DIR / "assets").mkdir(parents=True, exist_ok=True)
@@ -1409,7 +1608,8 @@ def main() -> int:
         "sites": sites, "casts": casts_rec, "series": series,
         "thresholds": [1.4, 2.8],
         "modelSeries": mseries or None,
-        "bathy": bathy, "relief": relief,
+        "modelStations": mstations or None,
+        "bathy": bathy, "coast": coast, "relief": relief,
     }
     write_assets(vi)
     size = sum(p.stat().st_size for p in OUT_DIR.rglob("*") if p.is_file())

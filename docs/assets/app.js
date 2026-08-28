@@ -113,25 +113,6 @@
         el("text", {x: W - MR + 5, y: Y(t) + 4,
           "class": "clab " + (i ? "amber" : "red")}).textContent = t;
       });
-      // line segments (gap-split)
-      var seg = [];
-      function flush() {
-        if (seg.length > 1) {
-          el("polyline", {fill: "none", points: seg.map(function (p) {
-            return X(p.d) + "," + Y(p.v);
-          }).join(" "), "class": "cline"});
-        } else if (seg.length === 1) {
-          el("circle", {cx: X(seg[0].d), cy: Y(seg[0].v), r: 2,
-            "class": "cline-dot"});
-        }
-        seg = [];
-      }
-      pts.forEach(function (p) {
-        if (p.d < x0 || p.d > x1) { flush(); return; }
-        if (seg.length && p.d - seg[seg.length - 1].d > gap) flush();
-        seg.push(p);
-      });
-      flush();
       // model band + dashed prediction line (never confusable with obs)
       if (mod.length) {
         var mvis = mod.filter(function (p) {
@@ -151,6 +132,25 @@
           }).join(" "), "class": "cmline"});
         }
       }
+      // line segments (gap-split)
+      var seg = [];
+      function flush() {
+        if (seg.length > 1) {
+          el("polyline", {fill: "none", points: seg.map(function (p) {
+            return X(p.d) + "," + Y(p.v);
+          }).join(" "), "class": "cline"});
+        } else if (seg.length === 1) {
+          el("circle", {cx: X(seg[0].d), cy: Y(seg[0].v), r: 2,
+            "class": "cline-dot"});
+        }
+        seg = [];
+      }
+      pts.forEach(function (p) {
+        if (p.d < x0 || p.d > x1) { flush(); return; }
+        if (seg.length && p.d - seg[seg.length - 1].d > gap) flush();
+        seg.push(p);
+      });
+      flush();
       // cast dots
       casts.forEach(function (c) {
         if (c.d < x0 || c.d > x1) return;
@@ -585,6 +585,75 @@
       });
     }
 
+    // ---- modeled-station triangles (hollow; toggle, default off) ----
+    var byCode = {};
+    VI.sites.forEach(function (s) { byCode[s.code] = s; });
+    var modeledLayer = L.layerGroup();
+    var KIND_LABEL = {dfo: "DFO cast station",
+      continuous: "continuous site", onc_cf: "ONC CF station"};
+    function modIcon(cls) {
+      var col = VI.colors[cls] || VI.colors.unclassified;
+      return L.divIcon({html: "<svg width='22' height='22' xmlns='" +
+        "http://www.w3.org/2000/svg'><polygon points='11,3.5 19.5,18.5 " +
+        "2.5,18.5' fill='rgba(255,255,255,.28)' stroke='" + col +
+        "' stroke-width='2.2'/></svg>",
+        className: "", iconSize: [22, 22], iconAnchor: [11, 11]});
+    }
+    function modStationHtml(code, kind, cls, nCasts) {
+      return "<div class='i-h'>" + code +
+        " <span class='tt-b'>MODELED</span></div>" +
+        "<div class='i-subh'>" + (KIND_LABEL[kind] || kind) +
+        " \u00b7 hgb_quantile_v1.1</div>" +
+        "<div class='i-sec'><div class='i-lab'>Predicted status</div>" +
+        "<div class='i-pills'><span class='i-pill'><span class='i-dot' " +
+        "style='background:" + (VI.colors[cls] || "#868e96") + "'></span>" +
+        "Typical low (pred p10): <b>" + (VI.labels[cls] || "\u2013") +
+        "</b></span></div></div>" +
+        "<div class='i-sec'><div class='i-lab'>Observed here</div>" +
+        "<div class='i-row'>" + nCasts + " CTD cast" +
+        (nCasts === 1 ? "" : "s") + " (drawn on the chart)</div></div>" +
+        "<div class='i-note info'>Every value from this marker is a " +
+        "<b>model prediction</b>. The chart shows the model median " +
+        "(dashed) with its calibrated 80% band; the station's real casts " +
+        "sit on top.</div>";
+    }
+    if (VI.modelStations) {
+      Object.keys(VI.modelStations).forEach(function (code) {
+        var st = VI.modelStations[code];
+        var kind = st[2], cls = st[3];
+        if (kind === "onc_cf") return;              // site triangle exists
+        if (kind === "continuous" && byCode[code]) return;  // circle exists
+        var mk = L.marker([st[0], st[1]],
+          {icon: modIcon(cls), keyboard: false});
+        mk.bindTooltip("<div class='tt-h'>" + code +
+          " <span class='tt-b'>MODELED</span></div>" +
+          "<div class='tt-r'><span class='tt-dot' style='background:" +
+          (VI.colors[cls] || "#868e96") + "'></span>" +
+          (VI.labels[cls] || "") +
+          " <span class='tt-mut'>(pred p10 \u00b7 v1.1)</span></div>",
+          {sticky: true, className: "vi-tt"});
+        mk.on("click", function () {
+          var n = VI.casts.filter(function (c) {
+            return c.s === code;
+          }).length;
+          openDetail(modStationHtml(code, kind, cls, n), code,
+            undefined, [st[0], st[1]]);
+        });
+        modeledLayer.addLayer(mk);
+      });
+      var ckM = document.getElementById("ck-modelst");
+      if (ckM) ckM.addEventListener("change", function (e) {
+        if (e.target.checked) modeledLayer.addTo(map);
+        else map.removeLayer(modeledLayer);
+      });
+    }
+    H._openModeled = function (code) {
+      var st = VI.modelStations[code];
+      openDetail(modStationHtml(code, st[2], st[3],
+        VI.casts.filter(function (c) { return c.s === code; }).length),
+        code, undefined, [st[0], st[1]]);
+    };
+
     // ---- fit-to-data ----
     function fitData() {
       var pts = [];
@@ -716,8 +785,6 @@
     });
 
     // ---- search + deep link ----
-    var byCode = {};
-    VI.sites.forEach(function (s) { byCode[s.code] = s; });
     document.getElementById("search").addEventListener("change",
       function (e) {
         var code = e.target.value.split(" - ")[0].trim().toUpperCase();
@@ -741,7 +808,9 @@
 
     H.counts = function () {
       return {sites: siteLayer.getLayers().length,
-              casts: castLayer.getLayers().length};
+              casts: castLayer.getLayers().length,
+              modeled: map.hasLayer(modeledLayer)
+                ? modeledLayer.getLayers().length : 0};
     };
     document.getElementById("sb-toggle").onclick = function () {
       document.getElementById("sidebar").classList.toggle("open");

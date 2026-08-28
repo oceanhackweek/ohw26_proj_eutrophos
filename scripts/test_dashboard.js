@@ -57,6 +57,19 @@ setTimeout(() => {
 
   check("site markers on boot", counts().sites, VI.sites.length);
   check("cast years start at DFO era", VI.meta.cast_years[0], 2006);
+  {
+    const g = {};
+    VI.casts.filter(c => c.j).forEach(c => (g[c.s] = g[c.s] || []).push(c));
+    const arr = Object.values(g).find(a => a.length >= 12);
+    // spiral centre from cast 0 via the known formula (r0=0.0012, ang=0)
+    const la0 = arr[0].la - 0;
+    const lo0 = arr[0].lo - 0.0012 / 0.66;
+    const r = arr.map(c => Math.hypot(c.la - la0, (c.lo - lo0) * 0.66));
+    let mono = 0;
+    for (let i = 1; i < r.length; i++) if (r[i] > r[i - 1]) mono++;
+    check("jitter spirals outward in time order",
+      mono / (r.length - 1) > 0.9, true);
+  }
   check("CTD casts on by default", counts().casts, VI.casts.length);
   check("cast filters visible by default",
     !doc.getElementById("cast-filters").classList.contains("hidden"), true);
@@ -266,8 +279,16 @@ setTimeout(() => {
     sel.value = "latest.png"; fire(sel, "change");
     check("frame dropdown swaps the overlay", doc.querySelector(
       "#map .leaflet-surface-pane img").src.includes("latest.png"), true);
+    check("scrim fades the basemap while surface is on",
+      doc.querySelectorAll("#map path.map-scrim").length, 1);
+    check("coastline drawn over the surface",
+      doc.querySelectorAll("#map .leaflet-coast-pane path").length > 0,
+      true);
     ckS.checked = false; fire(ckS, "change");
     check("surface unchecks clean", simg(), 0);
+    check("scrim + coastline removed with it",
+      doc.querySelectorAll("#map path.map-scrim").length +
+      doc.querySelectorAll("#map .leaflet-coast-pane path").length, 0);
   } else console.log("  -- no manifest file (surface controls stay hidden)");
 
   if (VI.bathy) {
@@ -283,7 +304,56 @@ setTimeout(() => {
     check("no separate model layer control",
       doc.getElementById("ck-model"), null);
     check("model series cover the full station set",
-      Object.keys(VI.modelSeries).length, 284);
+      Object.keys(VI.modelSeries).length, 620);
+    check("band renders behind the observed line (source order)",
+      (() => { const a = fs.readFileSync("docs/assets/app.js", "utf8");
+        return a.indexOf("// model band") < a.indexOf("// line segments");
+      })(), true);
+    if (VI.modelSeries.BACAX) {
+      const si2 = doc.getElementById("search");
+      si2.value = "BACAX - x"; fire(si2, "change");
+      const nodes = Array.from(
+        doc.querySelectorAll("#d-chart svg.ichart *"));
+      const bi = nodes.findIndex(n => n.getAttribute &&
+        n.getAttribute("class") === "cmband");
+      const li = nodes.findIndex(n => n.getAttribute &&
+        n.getAttribute("class") === "cline");
+      check("BACAX gap-fill: band behind observed line", bi < li && bi > -1,
+        true);
+      doc.getElementById("d-close").click();
+    } else console.log("  -- BLOCKED: no continuous-site predictions in " +
+      "the pushed CSV (656-station file not landed); gap-fill auto-" +
+      "enables on rebake once it does");
+    check("modeled-station layer off by default", counts().modeled, 0);
+    const ckM = doc.getElementById("ck-modelst");
+    ckM.checked = true; fire(ckM, "change");
+    const expM = Object.values(VI.modelStations)
+      .filter(v => v[2] === "dfo").length;
+    check("hollow triangles for every DFO modeled station",
+      counts().modeled, expM);
+    check("northern DFO stations covered (lat > 50.5)",
+      Object.values(VI.modelStations)
+        .some(v => v[2] === "dfo" && v[0] > 50.5), true);
+    // nearest real stand-in for the briefing's absent example station
+    let best = null, bd = 1e9;
+    for (const [c, v] of Object.entries(VI.modelStations)) {
+      if (v[2] !== "dfo") continue;
+      const d = Math.abs(v[0] - 48.8) + Math.abs(v[1] + 126.2);
+      if (d < bd) { bd = d; best = c; }
+    }
+    A._openModeled(best);
+    check("modeled-station panel: band + its own casts (" + best + ")",
+      doc.querySelector("#d-chart .cmband") !== null &&
+      doc.querySelectorAll("#d-chart .ccast, #d-chart .ccast-q").length > 0,
+      true);
+    check("panel is explicitly MODELED",
+      doc.getElementById("d-info").innerHTML.includes("MODELED"), true);
+    doc.getElementById("d-close").click();
+    ckM.checked = false; fire(ckM, "change");
+    check("modeled layer unchecks clean", counts().modeled, 0);
+    check("legend shows the hollow modeled-station triangle",
+      doc.getElementById("legend-panel").innerHTML
+        .includes("Modeled station"), true);
     check("DFO stations carry bands too",
       Object.keys(VI.modelSeries)
         .filter(k => k.startsWith("DFO")).length > 200, true);
@@ -297,16 +367,22 @@ setTimeout(() => {
       doc.querySelector("#d-chart .cmband") !== null, true);
     check("modeled site chart has dashed prediction line",
       doc.querySelector("#d-chart .cmline") !== null, true);
-    check("chart caption flags the model",
+    check("chart key names the model median",
       Array.from(doc.querySelectorAll("#d-chart svg text"))
-        .some(t => t.textContent.includes("modeled")), true);
+        .some(t => t.textContent.includes("model median")), true);
     const cap2 = doc.querySelector(
       '#d-chart svg.ichart rect[fill="transparent"]');
     cap2.dispatchEvent(new w.MouseEvent("mousemove",
       {clientX: 640, clientY: 200, bubbles: true}));
-    check("hovering a prediction says 'modeled' with its band",
-      doc.querySelector("#d-chart .ctip").innerHTML.includes("modeled"),
+    check("hover explains median + 80% band",
+      doc.querySelector("#d-chart .ctip").innerHTML
+        .includes("model median") &&
+      doc.querySelector("#d-chart .ctip").innerHTML.includes("80% band"),
       true);
+    check("chart key labels the band and median",
+      Array.from(doc.querySelectorAll("#d-chart svg text"))
+        .map(t => t.textContent).join("|")
+        .includes("80% band"), true);
     doc.getElementById("d-close").click();
   } else console.log("  -- no modelSeries in data.js " +
     "(add model_predictions.csv to test)");
