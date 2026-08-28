@@ -30,7 +30,59 @@ LENSES = ([("exposure", "Typical low (p10)", "class_exposure", ""),
 
 
 # -- payload -----------------------------------------------------------------
-def site_records(cls: pd.DataFrame, charts: dict,
+def _pill(label: str, cls_key) -> str:
+    lab = core.LABELS.get(cls_key, "&#8211;")
+    col = core.COLORS.get(cls_key, core.COLORS["unclassified"])
+    return (f'<span class="i-pill"><span class="i-dot" '
+            f'style="background:{col}"></span>{label}: <b>{lab}</b></span>')
+
+
+def site_info_html(r: pd.Series, mnote: str) -> str:
+    f = core.fmt
+    years = ""
+    if pd.notna(r.get("first")) and pd.notna(r.get("last")):
+        years = (f"{pd.to_datetime(r['first'], utc=True).year}&#8211;"
+                 f"{pd.to_datetime(r['last'], utc=True).year}")
+    cont = r["data_kind"] == "continuous"
+    depth = f(r.get("station_depth_m", r.get("maxDepth")), 0)
+    sub = " &#183; ".join(x for x in [
+        r["site_code"],
+        "continuous sensor" if cont else "ship-visit station",
+        str(r.get("final_tier", "")),
+        f"{depth} m" if depth != "-" else "",
+        f"{r['confidence']} confidence"] if x)
+    h = [f'<div class="i-h">{r["site_name"]}</div>',
+         f'<div class="i-subh">{sub}</div>',
+         '<div class="i-sec"><div class="i-lab">Status</div>'
+         '<div class="i-pills">'
+         + _pill("Typical low", r["class_exposure"])
+         + _pill("Worst case", r["class_worst_case"])
+         + "</div></div>",
+         '<div class="i-sec"><div class="i-lab">Oxygen (mL/L)</div>'
+         '<div class="i-stats">'
+         f'<div class="i-st"><b>{f(r["o2_min"])}</b><span>min</span></div>'
+         f'<div class="i-st"><b>{f(r["o2_p10"])}</b><span>p10</span></div>'
+         f'<div class="i-st"><b>{f(r["o2_median"])}</b><span>median</span>'
+         "</div></div></div>",
+         '<div class="i-sec"><div class="i-lab">Time below threshold</div>'
+         f'<div class="i-row">&lt; 1.4 mL/L: '
+         f'<b>{f(r["pct_below_hypoxic"], 1)}%</b> &nbsp;&#183;&nbsp; '
+         f'&lt; 2.8: <b>{f(r["pct_below_at_risk"], 1)}%</b></div></div>',
+         '<div class="i-sec"><div class="i-lab">Record</div>'
+         f'<div class="i-row">{years} &#183; {r.get("record_status", "")}'
+         "</div>"
+         f'<div class="i-row">{r["n_obs"]:,} '
+         f'{"days" if cont else "casts"} '
+         f'({r["n_summer_obs"]:,} in Jun&#8211;Oct)</div></div>']
+    if mnote:
+        h.append(f'<div class="i-note warn">{mnote}</div>')
+    if r["site_code"] in core.OMZ_NOTES:
+        h.append(f'<div class="i-note info">'
+                 f'{core.OMZ_NOTES[r["site_code"]]}</div>')
+    return "".join(h)
+
+
+def site_records(cls: pd.DataFrame,
                  casts: pd.DataFrame | None) -> list[dict]:
     out = []
     for _, r in cls.iterrows():
@@ -47,7 +99,7 @@ def site_records(cls: pd.DataFrame, charts: dict,
             "conf": r["confidence"],
             "classes": {key: (r.get(col) if pd.notna(r.get(col)) else None)
                         for key, _, col, _ in LENSES},
-            "detail": core.popup_html(r, charts, None, mnote),
+            "detail": site_info_html(r, mnote),
         })
     return out
 
@@ -488,7 +540,11 @@ html[data-theme=dark] .cline{stroke:#57b6ff}
 .ccast-q{fill:none;stroke:#868e96;stroke-width:1.3}
 .cthr{stroke-dasharray:5 4;stroke-width:1.3}
 .cthr.red{stroke:#e03131}.cthr.amber{stroke:#f59f00}
-.clab{font-size:11px;fill:var(--mut)}
+.clab{font-size:12.5px;fill:var(--mut);
+font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.caxis{font-size:13px;font-weight:600;fill:var(--mut);
+font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.lens-cap{fill:var(--accent);font-weight:700}
 .clab.red{fill:#e03131}.clab.amber{fill:#f59f00}
 .cend{text-anchor:end}.cmid{text-anchor:middle}.cmut{opacity:.75}
 .creset{fill:var(--accent);cursor:pointer;font-weight:700}
@@ -500,6 +556,40 @@ html[data-theme=dark] .cline{stroke:#57b6ff}
 var(--accent);border-radius:8px;padding:5px 9px;font-size:12px;
 pointer-events:none;box-shadow:var(--shadow);white-space:nowrap;z-index:50}
 #detail table td{color:var(--ink)}
+.i-h{font-size:16px;font-weight:700;margin:2px 0 1px}
+.i-subh{color:var(--mut);font-size:12px;margin-bottom:4px}
+.i-sec{border-top:1px solid var(--line);padding:8px 0 6px}
+.i-lab{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+color:var(--accent);margin-bottom:4px}
+.i-row{font-size:12.5px;margin:2px 0}
+.i-pills{display:flex;flex-direction:column;gap:5px}
+.i-pill{display:inline-flex;align-items:center;gap:7px;background:
+var(--panel2);border:1px solid var(--line);border-radius:999px;
+padding:4px 11px;font-size:12.5px;width:fit-content}
+.i-dot{width:10px;height:10px;border-radius:50%;
+box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.i-stats{display:flex;gap:8px}
+.i-st{flex:1;background:var(--panel2);border:1px solid var(--line);
+border-radius:10px;padding:7px 4px;text-align:center}
+.i-st b{display:block;font-size:15px}
+.i-st span{color:var(--mut);font-size:10.5px;text-transform:uppercase;
+letter-spacing:.06em}
+.i-note{margin-top:8px;padding:7px 10px;border-radius:8px;font-size:11.5px;
+line-height:1.45;background:var(--panel2);color:var(--ink)}
+.i-note.warn{border-left:3px solid #f59f00}
+.i-note.info{border-left:3px solid #5c7cfa}
+.leaflet-tooltip.vi-tt{background:var(--panel);color:var(--ink);
+border:1px solid var(--line);border-radius:9px;
+box-shadow:var(--shadow);padding:7px 10px;font:12px/1.4 inherit}
+.leaflet-tooltip.vi-tt::before{display:none}
+.tt-h{font-weight:700;font-size:12.5px}
+.tt-r{display:flex;align-items:center;gap:6px;margin-top:2px;
+color:var(--ink)}
+.tt-dot{width:9px;height:9px;border-radius:50%;
+box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);flex:0 0 9px}
+.tt-mut{color:var(--mut)}
+.tt-b{background:var(--panel2);border:1px solid var(--line);
+border-radius:6px;padding:0 5px;font-size:10.5px;color:var(--mut)}
 #d-close{position:absolute;top:8px;right:12px;border:1px solid
 var(--line);border-radius:8px;background:var(--panel2);width:28px;
 height:28px;font-size:16px;cursor:pointer;color:var(--mut)}
@@ -581,7 +671,7 @@ APP_JS = r"""(function () {
       host.innerHTML = "";
       var W = Math.max(320, host.getBoundingClientRect().width || 900);
       var H = Math.max(170, host.getBoundingClientRect().height || 260);
-      var ML = 46, MR = 46, MT = 16, MB = 26;
+      var ML = 70, MR = 52, MT = 24, MB = 46;
       svg = document.createElementNS(NS, "svg");
       svg.setAttribute("viewBox", "0 0 " + W + " " + H);
       svg.setAttribute("class", "ichart");
@@ -613,21 +703,25 @@ APP_JS = r"""(function () {
           "class": "clab cend"})
           .textContent = (step < 1 ? v.toFixed(1) : v.toFixed(0));
       }
-      el("text", {x: ML - 7, y: MT - 4, "text-anchor": "end",
-        "class": "clab cend"}).textContent = "mL/L";
+      var yt = el("text", {x: 18, y: (MT + H - MB) / 2,
+        "text-anchor": "middle", "class": "caxis"});
+      yt.setAttribute("transform", "rotate(-90 18 " +
+        ((MT + H - MB) / 2) + ")");
+      yt.textContent = "Near-bottom O\u2082 (mL/L)";
+      el("text", {x: ML + (W - ML - MR) / 2, y: H - 7,
+        "text-anchor": "middle", "class": "caxis"}).textContent = "Year";
       // x ticks: years, thinned to fit
       var yr0 = new Date(x0 * 86400000).getUTCFullYear() + 1;
       var yr1 = new Date(x1 * 86400000).getUTCFullYear();
       var every = Math.max(1, Math.ceil((yr1 - yr0 + 1) /
-        Math.floor((W - ML - MR) / 52)));
+        Math.max(2, Math.floor((W - ML - MR) / 60))));
       for (var yy = yr0; yy <= yr1; yy++) {
         var dd = Date.UTC(yy, 0, 1) / 86400000;
         el("line", {x1: X(dd), x2: X(dd), y1: MT, y2: H - MB,
           "class": "cgrid"});
         if ((yy - yr0) % every === 0)
-          el("text", {x: X(dd), y: H - 8, "text-anchor": "middle",
-            "class": "clab cmid"})
-            .textContent = (x1 - x0 > 1200 ? "'" + String(yy).slice(2) : yy);
+          el("text", {x: X(dd), y: H - MB + 18, "text-anchor": "middle",
+            "class": "clab cmid"}).textContent = yy;
       }
       // thresholds
       thresholds.forEach(function (t, i) {
@@ -665,22 +759,27 @@ APP_JS = r"""(function () {
           : {cx: X(c.d), cy: Y(c.v), r: 3.4, fill: colors[c.c],
              "class": "ccast"});
       });
-      // caption + hint
-      el("text", {x: W - MR, y: MT - 4, "text-anchor": "end",
-        "class": "clab cend cmut"})
-        .textContent = data.series
-          ? (data.series.k === "w" ? "weekly means" : "daily")
-          : "individual casts";
-      el("text", {x: ML, y: MT - 4, "class": "clab cmut"})
-        .textContent = "drag to zoom \u00b7 double-click to reset";
+      // captions: lens (left), sampling kind or reset (right), hint (btm)
+      if (data.lens)
+        el("text", {x: ML, y: MT - 8, "class": "clab lens-cap"})
+          .textContent = "Lens: " + data.lens;
       if (x0 > d0 || x1 < d1) {
-        var rb = el("text", {x: ML + 224, y: MT - 4,
+        var rb = el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
           "class": "clab creset"});
         rb.textContent = "[reset zoom]";
         rb.addEventListener("click", function () {
           x0 = d0; x1 = d1; render();
         });
+      } else {
+        el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
+          "class": "clab cend cmut"})
+          .textContent = data.series
+            ? (data.series.k === "w" ? "weekly means" : "daily values")
+            : "individual casts";
       }
+      el("text", {x: W - MR, y: H - 7, "text-anchor": "end",
+        "class": "clab cmut"})
+        .textContent = "drag to zoom \u00b7 double-click resets";
       // interaction layers
       var cross = el("line", {x1: 0, x2: 0, y1: MT, y2: H - MB,
         "class": "ccross hiddenattr"});
@@ -816,14 +915,17 @@ APP_JS = r"""(function () {
     var detail = document.getElementById("detail");
     var dInfo = document.getElementById("d-info");
     var dChart = document.getElementById("d-chart");
+    var lastKey = null;
+    function lensName() { return VI.lensNames[lens] || lens; }
     function renderDock(key) {
+      lastKey = key;
       var series = VI.series[key] || null;
       var siteCasts = VI.casts.filter(function (c) { return c.s === key; });
       H.chart = IChart(dChart,
-        {series: series, casts: siteCasts},
+        {series: series, casts: siteCasts, lens: lensName()},
         VI.colors, VI.thresholds);
     }
-    function openDetail(html, chartKey, hash) {
+    function openDetail(html, chartKey, hash, latlng) {
       dInfo.innerHTML = html;
       var slot = dInfo.querySelector("[data-chart]");
       if (slot) slot.remove();
@@ -834,7 +936,9 @@ APP_JS = r"""(function () {
       setTimeout(function () {
         map.invalidateSize();
         if (H.chart) H.chart.render();
-      }, 180);
+        if (latlng) map.setView(latlng,
+          Math.max(map.getZoom(), 9), {animate: false});
+      }, 190);
       if (hash !== undefined) location.hash = hash;
     }
     window.addEventListener("resize", function () {
@@ -865,8 +969,10 @@ APP_JS = r"""(function () {
         fillOpacity: VI.opacity[s.conf] || 0.6,
         fill: true
       });
-      mk.on("click", function () { openDetail(s.detail, s.code, s.code); });
-      mk.bindTooltip("", {sticky: true});
+      mk.on("click", function () {
+        openDetail(s.detail, s.code, s.code, [s.lat, s.lon]);
+      });
+      mk.bindTooltip("", {sticky: true, className: "vi-tt"});
       siteMarkers[s.code] = mk;
     });
 
@@ -876,8 +982,13 @@ APP_JS = r"""(function () {
         var mk = siteMarkers[s.code];
         var c = H.classForLens(s, lens);
         mk.setStyle({fillColor: VI.colors[c] || VI.colors.unclassified});
-        mk.setTooltipContent(s.name + " - " +
-          (VI.labels[c] || "no data") + (tag ? " (" + tag + ")" : ""));
+        mk.setTooltipContent(
+          "<div class='tt-h'>" + s.name + "</div>" +
+          "<div class='tt-r'><span class='tt-dot' style='background:" +
+          (VI.colors[c] || VI.colors.unclassified) + "'></span>" +
+          (VI.labels[c] || "no data") +
+          (tag ? " <span class='tt-mut'>(" + tag + ")</span>" : "") +
+          "</div>");
         var on = H.siteVisible(s, lens, confs, classes);
         if (on && !siteLayer.hasLayer(mk)) siteLayer.addLayer(mk);
         if (!on && siteLayer.hasLayer(mk)) siteLayer.removeLayer(mk);
@@ -896,31 +1007,41 @@ APP_JS = r"""(function () {
         : {radius: 3, color: "#ffffff", weight: 0.8, fill: true,
            fillColor: VI.colors[c.c], fillOpacity: 0.95,
            renderer: castCanvas});
-      mk.bindTooltip(c.s + " - " + c.t.slice(0, 10) + " - " +
-        c.o.toFixed(2) + " mL/L (" + c.m + ")" +
-        (c.f ? " \u00b7 DFO" : "") +
-        (c.q ? " - QC-suspect" : ""), {sticky: true});
+      mk.bindTooltip(
+        "<div class='tt-h'>" + c.s +
+        (c.f ? " <span class='tt-b'>DFO</span>" : "") +
+        (c.q ? " <span class='tt-b'>QC</span>" : "") + "</div>" +
+        "<div class='tt-r'><span class='tt-dot' style='background:" +
+        (c.q ? "#868e96" : VI.colors[c.c]) + "'></span><b>" +
+        c.o.toFixed(2) + " mL/L</b>&nbsp;<span class='tt-mut'>" +
+        VI.labels[c.c] + "</span></div>" +
+        "<div class='tt-r tt-mut'>" + c.t.slice(0, 10) + "</div>",
+        {sticky: true, className: "vi-tt"});
       mk.on("click", function () { openDetail(castHtml(c), c.s); });
       return mk;
     });
     function castHtml(c) {
-      var rows = [["When", c.t + " UTC"],
-        ["Near-bottom O&#8322;", c.o.toFixed(2) + " mL/L &#8594; " +
-         VI.labels[c.c]],
-        ["Cast depth", c.d === null ? "&#8211;" : c.d + " m"],
-        ["Samples", c.n.toLocaleString()], ["Method", c.m],
-        ["Source", c.f ? "DFO IOS CTD" : "ONC community fishers"]];
-      if (c.q) rows.push(["QC", "<b>suspect</b> (&gt; site threshold; " +
-        "shown hollow, excluded from stats)"]);
-      return "<div style='font-family:sans-serif;font-size:12px'>" +
-        "<b style='font-size:13px'>" + c.s + "</b> - single cast" +
-        "<table style='margin-top:4px'>" + rows.map(function (r) {
-          return "<tr><td style='color:#666;padding-right:8px'>" + r[0] +
-            "</td><td>" + r[1] + "</td></tr>";
-        }).join("") + "</table>" +
-        (c.j ? "<div style='color:#888;margin-top:4px'>Dot position " +
-         "jittered ~100&#8211;800 m; all casts at this station share one " +
-         "nominal coordinate.</div>" : "") + "</div>";
+      var h = "<div class='i-h'>" + c.s + "</div>" +
+        "<div class='i-subh'>single CTD cast \u00b7 " +
+        (c.f ? "DFO IOS CTD" : "ONC community fishers") + "</div>" +
+        "<div class='i-sec'><div class='i-lab'>Reading</div>" +
+        "<div class='i-pills'><span class='i-pill'>" +
+        "<span class='i-dot' style='background:" +
+        (c.q ? "#868e96" : VI.colors[c.c]) + "'></span><b>" +
+        c.o.toFixed(2) + " mL/L</b>&nbsp;\u2192 " + VI.labels[c.c] +
+        "</span></div></div>" +
+        "<div class='i-sec'><div class='i-lab'>Cast</div>" +
+        "<div class='i-row'>" + c.t + " UTC</div>" +
+        "<div class='i-row'>depth " +
+        (c.d === null ? "\u2013" : c.d + " m") + " \u00b7 " +
+        c.n.toLocaleString() + " samples \u00b7 " + c.m + "</div></div>";
+      if (c.q) h += "<div class='i-note warn'><b>QC-flagged:</b> reads " +
+        "above the plausible range for this site; shown hollow and " +
+        "excluded from all statistics.</div>";
+      if (c.j) h += "<div class='i-note info'>Dot position jittered " +
+        "~100\u2013800 m; all casts at this station share one nominal " +
+        "coordinate.</div>";
+      return h;
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
                       suspect: true};
@@ -1008,13 +1129,18 @@ APP_JS = r"""(function () {
       var r = document.querySelector("input[name=lens]:checked").value;
       return r === "seasonal" ? seasonSel.value : r;
     }
+    function lensChanged() {
+      restyleSites(); refreshCasts();
+      if (lastKey && !detail.classList.contains("hidden"))
+        renderDock(lastKey);
+    }
     document.getElementById("lens-group").addEventListener("change",
-      function () { lens = currentLens(); restyleSites(); refreshCasts(); });
+      function () { lens = currentLens(); lensChanged(); });
     seasonSel.addEventListener("change", function () {
       document.querySelector("input[name=lens][value=seasonal]")
         .checked = true;
       lens = seasonSel.value;
-      restyleSites(); refreshCasts();
+      lensChanged();
     });
     document.getElementById("base-group").addEventListener("change",
       function (e) {
@@ -1102,8 +1228,7 @@ APP_JS = r"""(function () {
         var code = e.target.value.split(" - ")[0].trim().toUpperCase();
         var s = byCode[code];
         if (!s) return;
-        map.setView([s.lat, s.lon], Math.max(map.getZoom(), 11));
-        openDetail(s.detail, s.code, s.code);
+        openDetail(s.detail, s.code, s.code, [s.lat, s.lon]);
       });
     // a #CODE link pans to the site and pulses its tooltip, but the dock
     // only opens on an actual click
@@ -1168,7 +1293,7 @@ def main() -> int:
               f"{dfo['site_code'].nunique()} DFO stations")
 
     charts = {}      # dock charts are now rendered client-side from series
-    sites = site_records(cls, charts, casts)
+    sites = site_records(cls, casts)
     series = series_records(cls, daily)
     casts_rec = cast_records(casts)
     model_rec = model_records(model, cls, charts)
@@ -1192,6 +1317,7 @@ def main() -> int:
         "box": core.BOX, "colors": core.COLORS, "labels": core.LABELS,
         "opacity": core.OPACITY,
         "lensTags": {k: tag for k, _, _, tag in LENSES},
+        "lensNames": {k: lbl for k, lbl, _, _ in LENSES},
         "sites": sites, "casts": casts_rec, "series": series,
         "thresholds": [1.4, 2.8],
         "model": model_rec or None, "bathy": bathy, "relief": relief,

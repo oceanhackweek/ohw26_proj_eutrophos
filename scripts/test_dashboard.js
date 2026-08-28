@@ -65,8 +65,27 @@ setTimeout(() => {
     doc.body.classList.contains("detail-open"), true);
   check("dock renders interactive chart",
     doc.querySelector("#d-chart svg.ichart") !== null, true);
-  check("dock info pane has the stats table",
-    doc.getElementById("d-info").querySelector("table") !== null, true);
+  check("dock info uses the structured layout",
+    doc.querySelectorAll("#d-info .i-sec").length >= 3 &&
+    doc.querySelectorAll("#d-info .i-pill").length >= 2, true);
+  const capTexts = () => Array.from(
+    doc.querySelectorAll("#d-chart svg.ichart text"))
+    .map(t => t.textContent).join(" | ");
+  check("chart shows current lens",
+    capTexts().includes("Lens: Typical low"), true);
+  check("chart has axis titles",
+    capTexts().includes("Near-bottom O\u2082 (mL/L)") &&
+    capTexts().includes("Year"), true);
+  check("x-axis uses full years", /\| 20\d\d \|/.test(capTexts()), true);
+  // lens switch while dock open updates the caption
+  doc.querySelectorAll("#lens-group input[name=lens]").forEach(r => {
+    if (r.value === "worst") { r.checked = true; fire(r, "change"); }
+  });
+  check("lens caption follows the lens switch",
+    capTexts().includes("Lens: Worst case"), true);
+  doc.querySelectorAll("#lens-group input[name=lens]").forEach(r => {
+    if (r.value === "exposure") { r.checked = true; fire(r, "change"); }
+  });
   check("chart slot removed from info pane",
     doc.getElementById("d-info").querySelector("[data-chart]"), null);
   // hover readout
@@ -236,6 +255,21 @@ setTimeout(() => {
   inp.value = VI.sites[0].code + " - x"; fire(inp, "change");
   check("search sets hash", w.location.hash, "#" + VI.sites[0].code);
 
-  console.log(fails ? fails + " FAILURE(S)" : "all checks passed");
-  process.exit(fails ? 1 : 0);
+  // clicking a site pans the map to it (after the dock settles)
+  setTimeout(() => {
+    const s0 = VI.sites[0];
+    check("site click pans the map near the site",
+      Math.abs(A.map.getCenter().lat - s0.lat) < 0.05 &&
+      Math.abs(A.map.getCenter().lng - s0.lon) < 0.08, true);
+    check("themed tooltips in use",
+      doc.querySelectorAll("#map .leaflet-tooltip.vi-tt, " +
+        "#map path").length > 0 &&
+      docs_has_vi_tt(), true);
+    console.log(fails ? fails + " FAILURE(S)" : "all checks passed");
+    process.exit(fails ? 1 : 0);
+  }, 320);
+  function docs_has_vi_tt() {
+    return require("fs").readFileSync("docs/assets/app.js", "utf8")
+      .includes('className: "vi-tt"');
+  }
 }, 100);

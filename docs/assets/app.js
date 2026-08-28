@@ -48,7 +48,7 @@
       host.innerHTML = "";
       var W = Math.max(320, host.getBoundingClientRect().width || 900);
       var H = Math.max(170, host.getBoundingClientRect().height || 260);
-      var ML = 46, MR = 46, MT = 16, MB = 26;
+      var ML = 70, MR = 52, MT = 24, MB = 46;
       svg = document.createElementNS(NS, "svg");
       svg.setAttribute("viewBox", "0 0 " + W + " " + H);
       svg.setAttribute("class", "ichart");
@@ -80,21 +80,25 @@
           "class": "clab cend"})
           .textContent = (step < 1 ? v.toFixed(1) : v.toFixed(0));
       }
-      el("text", {x: ML - 7, y: MT - 4, "text-anchor": "end",
-        "class": "clab cend"}).textContent = "mL/L";
+      var yt = el("text", {x: 18, y: (MT + H - MB) / 2,
+        "text-anchor": "middle", "class": "caxis"});
+      yt.setAttribute("transform", "rotate(-90 18 " +
+        ((MT + H - MB) / 2) + ")");
+      yt.textContent = "Near-bottom O\u2082 (mL/L)";
+      el("text", {x: ML + (W - ML - MR) / 2, y: H - 7,
+        "text-anchor": "middle", "class": "caxis"}).textContent = "Year";
       // x ticks: years, thinned to fit
       var yr0 = new Date(x0 * 86400000).getUTCFullYear() + 1;
       var yr1 = new Date(x1 * 86400000).getUTCFullYear();
       var every = Math.max(1, Math.ceil((yr1 - yr0 + 1) /
-        Math.floor((W - ML - MR) / 52)));
+        Math.max(2, Math.floor((W - ML - MR) / 60))));
       for (var yy = yr0; yy <= yr1; yy++) {
         var dd = Date.UTC(yy, 0, 1) / 86400000;
         el("line", {x1: X(dd), x2: X(dd), y1: MT, y2: H - MB,
           "class": "cgrid"});
         if ((yy - yr0) % every === 0)
-          el("text", {x: X(dd), y: H - 8, "text-anchor": "middle",
-            "class": "clab cmid"})
-            .textContent = (x1 - x0 > 1200 ? "'" + String(yy).slice(2) : yy);
+          el("text", {x: X(dd), y: H - MB + 18, "text-anchor": "middle",
+            "class": "clab cmid"}).textContent = yy;
       }
       // thresholds
       thresholds.forEach(function (t, i) {
@@ -132,22 +136,27 @@
           : {cx: X(c.d), cy: Y(c.v), r: 3.4, fill: colors[c.c],
              "class": "ccast"});
       });
-      // caption + hint
-      el("text", {x: W - MR, y: MT - 4, "text-anchor": "end",
-        "class": "clab cend cmut"})
-        .textContent = data.series
-          ? (data.series.k === "w" ? "weekly means" : "daily")
-          : "individual casts";
-      el("text", {x: ML, y: MT - 4, "class": "clab cmut"})
-        .textContent = "drag to zoom \u00b7 double-click to reset";
+      // captions: lens (left), sampling kind or reset (right), hint (btm)
+      if (data.lens)
+        el("text", {x: ML, y: MT - 8, "class": "clab lens-cap"})
+          .textContent = "Lens: " + data.lens;
       if (x0 > d0 || x1 < d1) {
-        var rb = el("text", {x: ML + 224, y: MT - 4,
+        var rb = el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
           "class": "clab creset"});
         rb.textContent = "[reset zoom]";
         rb.addEventListener("click", function () {
           x0 = d0; x1 = d1; render();
         });
+      } else {
+        el("text", {x: W - MR, y: MT - 8, "text-anchor": "end",
+          "class": "clab cend cmut"})
+          .textContent = data.series
+            ? (data.series.k === "w" ? "weekly means" : "daily values")
+            : "individual casts";
       }
+      el("text", {x: W - MR, y: H - 7, "text-anchor": "end",
+        "class": "clab cmut"})
+        .textContent = "drag to zoom \u00b7 double-click resets";
       // interaction layers
       var cross = el("line", {x1: 0, x2: 0, y1: MT, y2: H - MB,
         "class": "ccross hiddenattr"});
@@ -283,14 +292,17 @@
     var detail = document.getElementById("detail");
     var dInfo = document.getElementById("d-info");
     var dChart = document.getElementById("d-chart");
+    var lastKey = null;
+    function lensName() { return VI.lensNames[lens] || lens; }
     function renderDock(key) {
+      lastKey = key;
       var series = VI.series[key] || null;
       var siteCasts = VI.casts.filter(function (c) { return c.s === key; });
       H.chart = IChart(dChart,
-        {series: series, casts: siteCasts},
+        {series: series, casts: siteCasts, lens: lensName()},
         VI.colors, VI.thresholds);
     }
-    function openDetail(html, chartKey, hash) {
+    function openDetail(html, chartKey, hash, latlng) {
       dInfo.innerHTML = html;
       var slot = dInfo.querySelector("[data-chart]");
       if (slot) slot.remove();
@@ -301,7 +313,9 @@
       setTimeout(function () {
         map.invalidateSize();
         if (H.chart) H.chart.render();
-      }, 180);
+        if (latlng) map.setView(latlng,
+          Math.max(map.getZoom(), 9), {animate: false});
+      }, 190);
       if (hash !== undefined) location.hash = hash;
     }
     window.addEventListener("resize", function () {
@@ -332,8 +346,10 @@
         fillOpacity: VI.opacity[s.conf] || 0.6,
         fill: true
       });
-      mk.on("click", function () { openDetail(s.detail, s.code, s.code); });
-      mk.bindTooltip("", {sticky: true});
+      mk.on("click", function () {
+        openDetail(s.detail, s.code, s.code, [s.lat, s.lon]);
+      });
+      mk.bindTooltip("", {sticky: true, className: "vi-tt"});
       siteMarkers[s.code] = mk;
     });
 
@@ -343,8 +359,13 @@
         var mk = siteMarkers[s.code];
         var c = H.classForLens(s, lens);
         mk.setStyle({fillColor: VI.colors[c] || VI.colors.unclassified});
-        mk.setTooltipContent(s.name + " - " +
-          (VI.labels[c] || "no data") + (tag ? " (" + tag + ")" : ""));
+        mk.setTooltipContent(
+          "<div class='tt-h'>" + s.name + "</div>" +
+          "<div class='tt-r'><span class='tt-dot' style='background:" +
+          (VI.colors[c] || VI.colors.unclassified) + "'></span>" +
+          (VI.labels[c] || "no data") +
+          (tag ? " <span class='tt-mut'>(" + tag + ")</span>" : "") +
+          "</div>");
         var on = H.siteVisible(s, lens, confs, classes);
         if (on && !siteLayer.hasLayer(mk)) siteLayer.addLayer(mk);
         if (!on && siteLayer.hasLayer(mk)) siteLayer.removeLayer(mk);
@@ -363,31 +384,41 @@
         : {radius: 3, color: "#ffffff", weight: 0.8, fill: true,
            fillColor: VI.colors[c.c], fillOpacity: 0.95,
            renderer: castCanvas});
-      mk.bindTooltip(c.s + " - " + c.t.slice(0, 10) + " - " +
-        c.o.toFixed(2) + " mL/L (" + c.m + ")" +
-        (c.f ? " \u00b7 DFO" : "") +
-        (c.q ? " - QC-suspect" : ""), {sticky: true});
+      mk.bindTooltip(
+        "<div class='tt-h'>" + c.s +
+        (c.f ? " <span class='tt-b'>DFO</span>" : "") +
+        (c.q ? " <span class='tt-b'>QC</span>" : "") + "</div>" +
+        "<div class='tt-r'><span class='tt-dot' style='background:" +
+        (c.q ? "#868e96" : VI.colors[c.c]) + "'></span><b>" +
+        c.o.toFixed(2) + " mL/L</b>&nbsp;<span class='tt-mut'>" +
+        VI.labels[c.c] + "</span></div>" +
+        "<div class='tt-r tt-mut'>" + c.t.slice(0, 10) + "</div>",
+        {sticky: true, className: "vi-tt"});
       mk.on("click", function () { openDetail(castHtml(c), c.s); });
       return mk;
     });
     function castHtml(c) {
-      var rows = [["When", c.t + " UTC"],
-        ["Near-bottom O&#8322;", c.o.toFixed(2) + " mL/L &#8594; " +
-         VI.labels[c.c]],
-        ["Cast depth", c.d === null ? "&#8211;" : c.d + " m"],
-        ["Samples", c.n.toLocaleString()], ["Method", c.m],
-        ["Source", c.f ? "DFO IOS CTD" : "ONC community fishers"]];
-      if (c.q) rows.push(["QC", "<b>suspect</b> (&gt; site threshold; " +
-        "shown hollow, excluded from stats)"]);
-      return "<div style='font-family:sans-serif;font-size:12px'>" +
-        "<b style='font-size:13px'>" + c.s + "</b> - single cast" +
-        "<table style='margin-top:4px'>" + rows.map(function (r) {
-          return "<tr><td style='color:#666;padding-right:8px'>" + r[0] +
-            "</td><td>" + r[1] + "</td></tr>";
-        }).join("") + "</table>" +
-        (c.j ? "<div style='color:#888;margin-top:4px'>Dot position " +
-         "jittered ~100&#8211;800 m; all casts at this station share one " +
-         "nominal coordinate.</div>" : "") + "</div>";
+      var h = "<div class='i-h'>" + c.s + "</div>" +
+        "<div class='i-subh'>single CTD cast \u00b7 " +
+        (c.f ? "DFO IOS CTD" : "ONC community fishers") + "</div>" +
+        "<div class='i-sec'><div class='i-lab'>Reading</div>" +
+        "<div class='i-pills'><span class='i-pill'>" +
+        "<span class='i-dot' style='background:" +
+        (c.q ? "#868e96" : VI.colors[c.c]) + "'></span><b>" +
+        c.o.toFixed(2) + " mL/L</b>&nbsp;\u2192 " + VI.labels[c.c] +
+        "</span></div></div>" +
+        "<div class='i-sec'><div class='i-lab'>Cast</div>" +
+        "<div class='i-row'>" + c.t + " UTC</div>" +
+        "<div class='i-row'>depth " +
+        (c.d === null ? "\u2013" : c.d + " m") + " \u00b7 " +
+        c.n.toLocaleString() + " samples \u00b7 " + c.m + "</div></div>";
+      if (c.q) h += "<div class='i-note warn'><b>QC-flagged:</b> reads " +
+        "above the plausible range for this site; shown hollow and " +
+        "excluded from all statistics.</div>";
+      if (c.j) h += "<div class='i-note info'>Dot position jittered " +
+        "~100\u2013800 m; all casts at this station share one nominal " +
+        "coordinate.</div>";
+      return h;
     }
     var castFilter = {y0: VI.meta.cast_years[0], y1: VI.meta.cast_years[1],
                       suspect: true};
@@ -475,13 +506,18 @@
       var r = document.querySelector("input[name=lens]:checked").value;
       return r === "seasonal" ? seasonSel.value : r;
     }
+    function lensChanged() {
+      restyleSites(); refreshCasts();
+      if (lastKey && !detail.classList.contains("hidden"))
+        renderDock(lastKey);
+    }
     document.getElementById("lens-group").addEventListener("change",
-      function () { lens = currentLens(); restyleSites(); refreshCasts(); });
+      function () { lens = currentLens(); lensChanged(); });
     seasonSel.addEventListener("change", function () {
       document.querySelector("input[name=lens][value=seasonal]")
         .checked = true;
       lens = seasonSel.value;
-      restyleSites(); refreshCasts();
+      lensChanged();
     });
     document.getElementById("base-group").addEventListener("change",
       function (e) {
@@ -569,8 +605,7 @@
         var code = e.target.value.split(" - ")[0].trim().toUpperCase();
         var s = byCode[code];
         if (!s) return;
-        map.setView([s.lat, s.lon], Math.max(map.getZoom(), 11));
-        openDetail(s.detail, s.code, s.code);
+        openDetail(s.detail, s.code, s.code, [s.lat, s.lon]);
       });
     // a #CODE link pans to the site and pulses its tooltip, but the dock
     // only opens on an actual click
