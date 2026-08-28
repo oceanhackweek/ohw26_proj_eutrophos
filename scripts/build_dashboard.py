@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -203,13 +203,24 @@ def model_records(model: pd.DataFrame | None, cls: pd.DataFrame,
 
 
 # -- static assets -----------------------------------------------------------
+def _v(path: Path) -> str:
+    import hashlib
+    return hashlib.md5(path.read_bytes()).hexdigest()[:8]
+
+
 def write_assets(vi: dict) -> None:
     a = OUT_DIR / "assets"
     a.mkdir(parents=True, exist_ok=True)
+    relief = a / "gebco_relief.png"
+    if vi.get("relief") and relief.exists():
+        vi["relief"]["url"] = f"assets/gebco_relief.png?v={_v(relief)}"
     payload = json.dumps(vi, separators=(",", ":")).replace("</", "<\\/")
     (a / "data.js").write_text("window.VI=" + payload + ";\n")
     (a / "style.css").write_text(STYLE)
     (a / "app.js").write_text(APP_JS)
+    vi["asset_v"] = {"data": _v(a / "data.js"),
+                     "style": _v(a / "style.css"),
+                     "app": _v(a / "app.js")}
     (OUT_DIR / "index.html").write_text(index_html(vi))
 
 
@@ -281,6 +292,7 @@ def index_html(vi: dict) -> str:
     opts = "".join(f'<option value="{s["code"]} - {s["name"]}">'
                    for s in vi["sites"])
     m = vi["meta"]
+    vv = vi.get("asset_v", {"data": "0", "style": "0", "app": "0"})
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -289,7 +301,7 @@ def index_html(vi: dict) -> str:
 <title>Vancouver Island near-bottom oxygen</title>
 <link rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v={vv['style']}">
 </head>
 <body>
 <button id="sb-toggle" aria-label="Toggle sidebar">&#9776;</button>
@@ -407,8 +419,8 @@ statistics; untick to hide them from the map too.">
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
 </script>
-<script src="assets/data.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/data.js?v={vv['data']}"></script>
+<script src="assets/app.js?v={vv['app']}"></script>
 </body>
 </html>
 """
@@ -1309,7 +1321,7 @@ def main() -> int:
 
     yrs = ([c["y"] for c in casts_rec] or [2019, date.today().year])
     vi = {
-        "meta": {"generated": date.today().isoformat(),
+        "meta": {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                  "n_sites": len(sites), "n_casts": len(casts_rec),
                  "cast_years": [min(yrs), max(yrs)],
                  "box": (f"{core.BOX['s']}&#8211;{core.BOX['n']} N, "
