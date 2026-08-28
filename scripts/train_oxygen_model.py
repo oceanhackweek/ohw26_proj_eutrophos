@@ -45,7 +45,11 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 DERIVED = Path("data/derived")
-MODEL_VERSION = "hgb_quantile_v1"
+MODEL_VERSION = "hgb_quantile_v1.1"
+# Band calibration: raw 10-90 quantiles covered only ~63% of truths at
+# HELD-OUT stations; scaling half-widths by this factor restores ~80%
+# empirical coverage (split-conformal style). Keep in sync with predict_grid.
+BAND_SCALE = 1.55
 ANOXIC, HYPOXIC, AT_RISK = 0.1, 1.4, 2.8
 
 
@@ -197,9 +201,19 @@ def gap_fill(table: pd.DataFrame, X_cols: list[str], stations_mode: str = "cf",
         frames.append(out)
     pred = pd.concat(frames, ignore_index=True)
     lo, hi = pred[["o2_lo", "o2_hi"]].min(axis=1), pred[["o2_lo", "o2_hi"]].max(axis=1)
-    pred["o2_lo"], pred["o2_hi"] = lo, hi   # quantile crossing guard
+    med = pred["o2_pred_ml_l"]
+    pred["o2_lo"] = (med - BAND_SCALE * (med - lo)).clip(lower=0)
+    pred["o2_hi"] = med + BAND_SCALE * (hi - med)
+    # explicit uncertainty: band width, plus a 0.25-1.0 confidence score using
+    # the same mapping predict_grid bakes into the surface alpha channel
+    pred["band_width_ml_l"] = (pred["o2_hi"] - pred["o2_lo"]).round(3)
+    pred["confidence"] = ((1.15 - pred["band_width_ml_l"] / 3.0)
+                          .clip(0.25, 1.0).round(3))
+    pred["confidence_label"] = pd.cut(pred["confidence"], [0, 0.55, 0.8, 1.01],
+                                      labels=["low", "medium", "high"])
     pred["model_version"] = MODEL_VERSION
     return pred[["site_code", "date", "o2_pred_ml_l", "o2_lo", "o2_hi",
+                 "band_width_ml_l", "confidence", "confidence_label",
                  "model_version"]]
 
 

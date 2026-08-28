@@ -44,11 +44,13 @@ def site_info_html(r: pd.Series, mnote: str) -> str:
         years = (f"{pd.to_datetime(r['first'], utc=True).year}&#8211;"
                  f"{pd.to_datetime(r['last'], utc=True).year}")
     cont = r["data_kind"] == "continuous"
+    cf = str(r["site_code"]).startswith("CF")
+    prog = "Community Fishers" if cf else "cabled observatory"
     depth = f(r.get("station_depth_m", r.get("maxDepth")), 0)
     sub = " &#183; ".join(x for x in [
         r["site_code"],
+        f"ONC {prog}",
         "continuous sensor" if cont else "ship-visit station",
-        str(r.get("final_tier", "")),
         f"{depth} m" if depth != "-" else "",
         f"{r['confidence']} confidence"] if x)
     h = [f'<div class="i-h">{r["site_name"]}</div>',
@@ -95,6 +97,9 @@ def site_records(cls: pd.DataFrame,
             "lat": round(float(r["lat"]), 5),
             "lon": round(float(r["lon"]), 5),
             "cont": continuous,
+            "org": "ONC",
+            "shp": ("tri" if str(r["site_code"]).startswith("CF")
+                    else "circ"),
             "ended": str(r.get("record_status", "")).startswith("ended"),
             "conf": r["confidence"],
             "classes": {key: (r.get(col) if pd.notna(r.get(col)) else None)
@@ -180,59 +185,6 @@ def model_series_records(model: pd.DataFrame | None) -> dict:
     return out
 
 
-def model_records(model: pd.DataFrame | None, cls: pd.DataFrame,
-                  mseries: dict) -> list[dict]:
-    """Hollow-diamond map markers, one per modeled site."""
-    if model is None or not mseries:
-        return []
-    out = []
-    coords = cls.set_index("site_code")[["lat", "lon", "site_name"]]
-    m = model[model["site_code"].notna()].copy()
-    for code, g in m.groupby("site_code"):
-        if code not in coords.index:
-            continue
-        lat, lon, name = coords.loc[code]
-        pred = g["o2_pred_ml_l"]
-        p10, med = pred.quantile(.1), pred.median()
-        cv = core.class_of(p10)
-        pct14 = (pred < 1.4).mean() * 100
-        span = (f"{pd.to_datetime(g['date'].min(), utc=True):%Y-%m}"
-                f"&#8211;{pd.to_datetime(g['date'].max(), utc=True):%Y-%m}")
-        ver = str(g["model_version"].iloc[0])
-        detail = (
-            f'<div class="i-h">{name}</div>'
-            f'<div class="i-subh">{code} &#183; <b>MODELED</b> &#183; '
-            f'{ver}</div>'
-            '<div class="i-sec"><div class="i-lab">Predicted status</div>'
-            '<div class="i-pills">' + _pill("Typical low (pred p10)", cv)
-            + "</div></div>"
-            '<div class="i-sec"><div class="i-lab">Predicted oxygen '
-            "(mL/L)</div>"
-            '<div class="i-stats">'
-            f'<div class="i-st"><b>{p10:.2f}</b><span>p10</span></div>'
-            f'<div class="i-st"><b>{med:.2f}</b><span>median</span></div>'
-            f'<div class="i-st"><b>{pct14:.0f}%</b><span>&lt;1.4</span>'
-            "</div></div></div>"
-            '<div class="i-sec"><div class="i-lab">Prediction record</div>'
-            f'<div class="i-row">{span} &#183; daily &#183; '
-            f'{len(g):,} predictions</div></div>'
-            '<div class="i-note info">Every value here is a <b>model '
-            "prediction</b>, never an observation. The chart shows the "
-            "prediction as a dashed line with its uncertainty band, over "
-            "the station's real casts.</div>")
-        out.append({"lat": round(float(lat), 5),
-                    "lon": round(float(lon), 5), "cls": cv,
-                    "tip": ("<div class='tt-h'>" + str(name) +
-                            " <span class='tt-b'>MODELED</span></div>"
-                            "<div class='tt-r'><span class='tt-dot' "
-                            "style='background:" + core.COLORS[cv] +
-                            "'></span>" + core.LABELS[cv] +
-                            " <span class='tt-mut'>(pred p10 &#183; " +
-                            ver + ")</span></div>"),
-                    "detail": detail, "key": code})
-    return out
-
-
 # -- static assets -----------------------------------------------------------
 def _v(path: Path) -> str:
     import hashlib
@@ -281,13 +233,14 @@ def index_html(vi: dict) -> str:
     bathy_ctl = ('<label><input type="checkbox" id="ck-bathy" checked> '
                  'Isobaths (100&#8211;2000 m)</label>'
                  if vi.get("bathy") else "")
-    model_ctl = ('<label><input type="checkbox" id="ck-model"> '
-                 'Modeled predictions</label>' if vi.get("model") else "")
-    model_leg = (_g('<polygon points="13,4 22,13 13,22 4,13" fill="none" '
-                    'stroke="#495057" stroke-width="2.4"/>',
-                    "Modeled prediction",
-                    "hollow diamond &#8212; never an observation")
-                 if vi.get("model") else "")
+
+    model_leg = (_g('<rect x="2" y="8" width="22" height="10" '
+                    'fill="#868e96" opacity=".25"/>'
+                    '<line x1="2" y1="13" x2="24" y2="13" stroke="#495057" '
+                    'stroke-width="2" stroke-dasharray="4 3"/>',
+                    "Model prediction (in charts)",
+                    "dashed line + grey band &#8212; never an observation")
+                 if vi.get("modelSeries") else "")
     bathy_leg = (_g('<line x1="3" y1="13" x2="23" y2="13" stroke="#4292c6" '
                     'stroke-width="2"/>', "GEBCO isobath",
                     "depth contours, 100&#8211;2000 m")
@@ -302,20 +255,23 @@ def index_html(vi: dict) -> str:
          ("unclassified", "no data")])
     glyph_rows = "".join([
         _g(f'<circle cx="13" cy="13" r="8" fill="{G}" stroke="#333" '
-           f'stroke-width="2.5"/>', "Continuous sensor site",
-           "records every day"),
-        _g(f'<circle cx="13" cy="13" r="5.5" fill="{G}" stroke="#fff" '
-           f'stroke-width="1.6"/>', "Ship-visit station",
-           "sampled a few times a year"),
+           f'stroke-width="2.5"/>', "ONC cabled sensor site",
+           "circle &#183; records every day"),
+        _g(f'<polygon points="13,3.5 23.5,21.5 2.5,21.5" fill="{G}" '
+           f'stroke="#fff" stroke-width="1.6"/>',
+           "ONC Community Fishers station",
+           "triangle &#183; sampled by ship visits"),
         _g(f'<circle cx="13" cy="13" r="3.2" fill="{G}" stroke="#fff" '
-           f'stroke-width="1"/>', "One CTD cast",
-           "colored by its own value"),
+           f'stroke-width="1"/>', "ONC CTD cast", "small circle"),
+        _g(f'<rect x="9.8" y="9.8" width="6.4" height="6.4" fill="{G}" '
+           f'stroke="#fff" stroke-width="1"/>', "DFO CTD cast",
+           "small square"),
         _g('<circle cx="13" cy="13" r="3.4" fill="none" stroke="#868e96" '
            'stroke-width="1.6"/>', "QC-flagged cast",
            "implausible reading, kept out of stats"),
         _g(f'<circle cx="13" cy="13" r="8" fill="{G}" stroke="#333" '
            f'stroke-width="2.5" stroke-dasharray="4 3"/>',
-           "Dashed = record ended"),
+           "Dashed outline = record ended"),
         _g(f'<circle cx="13" cy="13" r="8" fill="{G}" opacity=".4" '
            f'stroke="#333" stroke-width="2"/>',
            "Faded = lower confidence"),
@@ -388,6 +344,14 @@ chosen three-month season." class="lseason">
     <div class="stack">
       {relief_ctl}
       {bathy_ctl}
+      <div id="surface-ctl" class="hidden">
+        <label data-tip="Model-predicted near-bottom oxygen draped over
+the map (never observations). Frames come from the model manifest; dots
+always draw on top."><input type="checkbox" id="ck-surface">
+          Modeled surface <span class="hint" tabindex="0"
+          aria-label="What is the modeled surface?">?</span></label>
+        <select id="surface-frame" aria-label="Surface frame"></select>
+      </div>
       <label><input type="checkbox" id="ck-casts" checked>
         CTD casts</label>
       <div id="cast-filters" class="indent">
@@ -413,7 +377,6 @@ statistics; untick to hide them from the map too.">
           </button>
         </div>
       </div>
-      {model_ctl}
     </div>
   </section>
   <section>
@@ -436,8 +399,9 @@ statistics; untick to hide them from the map too.">
       <div class="lhead">What the markers mean</div>
       {glyph_rows}
       {model_leg}{bathy_leg}
-      <div class="lfoot">Click any marker to open its stats and full time
-        series below the map.</div>
+      <div class="lfoot">ONC = Ocean Networks Canada &#183; DFO =
+        Fisheries and Oceans Canada. Click any marker to open its stats
+        and full time series below the map.</div>
     </div>
   </div>
 </main>
@@ -450,6 +414,7 @@ statistics; untick to hide them from the map too.">
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
 </script>
+<script src="assets/model_manifest.js"></script>
 <script src="assets/data.js?v={vv['data']}"></script>
 <script src="assets/app.js?v={vv['app']}"></script>
 </body>
@@ -510,6 +475,9 @@ border-radius:9px;font-size:13px;background:var(--panel2)}
 align-items:center}
 .years select{padding:3px 6px;border:1px solid var(--line);
 border-radius:7px;background:var(--panel2)}
+#surface-ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#surface-ctl select{padding:3px 6px;border:1px solid var(--line);
+border-radius:7px;background:var(--panel2);max-width:168px}
 .presets{display:flex;gap:6px;flex-wrap:wrap}
 .preset{border:1px solid var(--line);background:var(--panel2);
 border-radius:999px;padding:3px 10px;font-size:11.5px;cursor:pointer;
@@ -975,6 +943,8 @@ APP_JS = r"""(function () {
     bases.ocean.addTo(map);
 
     map.createPane("relief").style.zIndex = 350;
+    map.createPane("surface").style.zIndex = 360;   // above relief, below
+                                                    // isobaths + cast dots
     var reliefLayer = null;
     if (VI.relief) {
       reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
@@ -1037,15 +1007,25 @@ APP_JS = r"""(function () {
     // ---- site markers ----
     var siteLayer = L.layerGroup().addTo(map);
     var siteMarkers = {};
+    function siteIcon(s, color) {
+      var op = VI.opacity[s.conf] || 0.6;
+      var ring = s.cont ? "#333333" : "#ffffff";
+      var rw = s.cont ? 2.5 : 1.6;
+      var dash = s.ended ? " stroke-dasharray='4 3'" : "";
+      var body = s.shp === "tri"
+        ? "<polygon points='13,3.5 23.5,21.5 2.5,21.5'"
+        : "<circle cx='13' cy='13' r='9'";
+      return L.divIcon({
+        html: "<svg width='26' height='26' " +
+          "xmlns='http://www.w3.org/2000/svg'>" + body +
+          " fill='" + color + "' fill-opacity='" + op +
+          "' stroke='" + ring + "' stroke-width='" + rw + "'" + dash +
+          "/></svg>",
+        className: "", iconSize: [26, 26], iconAnchor: [13, 13]});
+    }
     VI.sites.forEach(function (s) {
-      var mk = L.circleMarker([s.lat, s.lon], {
-        radius: s.cont ? 9 : 6,
-        color: s.cont ? "#333333" : "#ffffff",
-        weight: s.cont ? 2.5 : 1.5,
-        dashArray: s.ended ? "4" : null,
-        fillOpacity: VI.opacity[s.conf] || 0.6,
-        fill: true
-      });
+      var mk = L.marker([s.lat, s.lon],
+        {icon: siteIcon(s, VI.colors.unclassified), keyboard: false});
       mk.on("click", function () {
         openDetail(s.detail, s.code, s.code, [s.lat, s.lon]);
       });
@@ -1058,9 +1038,10 @@ APP_JS = r"""(function () {
       VI.sites.forEach(function (s) {
         var mk = siteMarkers[s.code];
         var c = H.classForLens(s, lens);
-        mk.setStyle({fillColor: VI.colors[c] || VI.colors.unclassified});
+        mk.setIcon(siteIcon(s, VI.colors[c] || VI.colors.unclassified));
         mk.setTooltipContent(
-          "<div class='tt-h'>" + s.name + "</div>" +
+          "<div class='tt-h'>" + s.name +
+          " <span class='tt-b'>" + s.org + "</span></div>" +
           "<div class='tt-r'><span class='tt-dot' style='background:" +
           (VI.colors[c] || VI.colors.unclassified) + "'></span>" +
           (VI.labels[c] || "no data") +
@@ -1077,8 +1058,25 @@ APP_JS = r"""(function () {
     var castLayer = L.layerGroup().addTo(map);
     var castOn = true;
     var castCanvas = L.canvas({padding: 0.4});
+    // DFO casts render as small squares on the shared canvas
+    L.Canvas.include({
+      _updateSquareMarker: function (layer) {
+        if (!this._drawing || layer._empty()) return;
+        var p = layer._point, ctx = this._ctx,
+            r = Math.max(Math.round(layer._radius), 1);
+        ctx.beginPath();
+        ctx.rect(p.x - r, p.y - r, r * 2, r * 2);
+        this._fillStroke(ctx, layer);
+      }
+    });
+    var SquareMarker = L.CircleMarker.extend({
+      _updatePath: function () {
+        this._renderer._updateSquareMarker(this);
+      }
+    });
     var castMarkers = VI.casts.map(function (c) {
-      var mk = L.circleMarker([c.la, c.lo], c.q
+      var Ctor = c.f ? SquareMarker : L.circleMarker;
+      var mk = new (c.f ? SquareMarker : L.CircleMarker)([c.la, c.lo], c.q
         ? {radius: 3, color: "#868e96", weight: 1.4, fill: false,
            renderer: castCanvas}
         : {radius: 3, color: "#ffffff", weight: 0.8, fill: true,
@@ -1086,7 +1084,7 @@ APP_JS = r"""(function () {
            renderer: castCanvas});
       mk.bindTooltip(
         "<div class='tt-h'>" + c.s +
-        (c.f ? " <span class='tt-b'>DFO</span>" : "") +
+        " <span class='tt-b'>" + (c.f ? "DFO" : "ONC") + "</span>" +
         (c.q ? " <span class='tt-b'>QC</span>" : "") + "</div>" +
         "<div class='tt-r'><span class='tt-dot' style='background:" +
         (c.q ? "#868e96" : VI.colors[c.c]) + "'></span><b>" +
@@ -1094,9 +1092,15 @@ APP_JS = r"""(function () {
         VI.labels[c.c] + "</span></div>" +
         "<div class='tt-r tt-mut'>" + c.t.slice(0, 10) + "</div>",
         {sticky: true, className: "vi-tt"});
-      mk.on("click", function () { openDetail(castHtml(c), c.s); });
+      mk.on("click", function () {
+        openDetail(castHtml(c), c.s, undefined, [c.la, c.lo]);
+      });
       return mk;
     });
+    H._openCast = function (i) {
+      var c = VI.casts[i];
+      openDetail(castHtml(c), c.s, undefined, [c.la, c.lo]);
+    };
     function castHtml(c) {
       var h = "<div class='i-h'>" + c.s + "</div>" +
         "<div class='i-subh'>single CTD cast \u00b7 " +
@@ -1143,22 +1147,35 @@ APP_JS = r"""(function () {
       })).addTo(map);
     }
 
-    // ---- modeled ----
-    var modelLayer = null;
-    if (VI.model) {
-      modelLayer = L.layerGroup(VI.model.map(function (p) {
-        var sz = p.small ? 14 : 18, h = sz / 2;
-        var svg = "<svg width='" + sz + "' height='" + sz + "' xmlns='" +
-          "http://www.w3.org/2000/svg'><polygon points='" + h + ",1.5 " +
-          (sz - 1.5) + "," + h + " " + h + "," + (sz - 1.5) + " 1.5," + h +
-          "' fill='rgba(255,255,255,.55)' stroke='" + VI.colors[p.cls] +
-          "' stroke-width='2.6'/></svg>";
-        var mk = L.marker([p.lat, p.lon], {icon: L.divIcon({html: svg,
-          className: "", iconSize: [sz, sz], iconAnchor: [h, h]})});
-        mk.bindTooltip(p.tip, {sticky: true});
-        mk.on("click", function () { openDetail(p.detail, p.key); });
-        return mk;
-      }));
+    // ---- modeled surface (imageOverlay frames from MODEL_MANIFEST) ----
+    var surfaceLayer = null;
+    var surfaceSel = document.getElementById("surface-frame");
+    var surfaceCtl = document.getElementById("surface-ctl");
+    if (typeof MODEL_MANIFEST !== "undefined" && surfaceSel &&
+        MODEL_MANIFEST.frames && MODEL_MANIFEST.frames.length) {
+      surfaceCtl.classList.remove("hidden");
+      MODEL_MANIFEST.frames.forEach(function (f) {
+        var o = document.createElement("option");
+        o.value = f.png;
+        o.textContent = f.label;
+        surfaceSel.appendChild(o);
+      });
+      var showSurface = function () {
+        if (surfaceLayer) map.removeLayer(surfaceLayer);
+        surfaceLayer = L.imageOverlay("model_grid/" + surfaceSel.value,
+          MODEL_MANIFEST.bounds,
+          {pane: "surface", opacity: 0.85,
+           attribution: "Modeled \u00b7 " + MODEL_MANIFEST.model_version});
+        surfaceLayer.addTo(map);
+      };
+      var ckS = document.getElementById("ck-surface");
+      ckS.addEventListener("change", function (e) {
+        if (e.target.checked) showSurface();
+        else if (surfaceLayer) map.removeLayer(surfaceLayer);
+      });
+      surfaceSel.addEventListener("change", function () {
+        if (ckS.checked) showSurface();
+      });
     }
 
     // ---- fit-to-data ----
@@ -1277,12 +1294,6 @@ APP_JS = r"""(function () {
         if (e.target.checked) bathyLayer.addTo(map);
         else map.removeLayer(bathyLayer);
       });
-    var ckModel = document.getElementById("ck-model");
-    if (ckModel && modelLayer) ckModel.addEventListener("change",
-      function (e) {
-        if (e.target.checked) modelLayer.addTo(map);
-        else map.removeLayer(modelLayer);
-      });
 
     // ---- theme toggle ----
     var tBtn = document.getElementById("theme-btn");
@@ -1374,7 +1385,6 @@ def main() -> int:
     series = series_records(cls, daily)
     casts_rec = cast_records(casts)
     mseries = model_series_records(model)
-    model_rec = model_records(model, cls, mseries)
     bathy_path = core.find_bathy(d)
     bathy = core.bathy_multilines(bathy_path) if bathy_path else None
     relief = None
@@ -1398,7 +1408,7 @@ def main() -> int:
         "lensNames": {k: lbl for k, lbl, _, _ in LENSES},
         "sites": sites, "casts": casts_rec, "series": series,
         "thresholds": [1.4, 2.8],
-        "model": model_rec or None, "modelSeries": mseries or None,
+        "modelSeries": mseries or None,
         "bathy": bathy, "relief": relief,
     }
     write_assets(vi)
@@ -1406,7 +1416,7 @@ def main() -> int:
     print(f"wrote {OUT_DIR}/ ({size / 1e6:.1f} MB): index.html + assets "
           f"({len(sites)} sites, {len(casts_rec):,} casts, "
           f"{len(series)} series"
-          + (f", {len(model_rec)} modeled sites" if model_rec else "")
+          + (f", {len(mseries)} modeled sites" if mseries else "")
           + (f", {sum(len(b['lines']) for b in bathy)} isobath segments"
              if bathy else "") + ")")
     return 0

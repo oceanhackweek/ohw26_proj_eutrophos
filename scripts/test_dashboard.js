@@ -36,6 +36,15 @@ global.SVGElement = w.SVGElement;
 const L = require("leaflet");
 w.L = L;
 w.eval(fs.readFileSync("docs/assets/data.js", "utf8"));
+let MF = null;
+try {
+  const mtxt = fs.readFileSync("docs/assets/model_manifest.js", "utf8");
+  MF = JSON.parse(mtxt.replace(/^\s*const\s+MODEL_MANIFEST\s*=\s*/, "")
+    .replace(/;\s*$/, ""));
+  // real <script> const creates a persistent global binding; indirect
+  // eval const does not - inject as var for the harness
+  w.eval("var MODEL_MANIFEST=" + JSON.stringify(MF) + ";");
+} catch (e) { /* no manifest in this build */ }
 w.eval(fs.readFileSync("docs/assets/app.js", "utf8"));
 
 setTimeout(() => {
@@ -68,6 +77,13 @@ setTimeout(() => {
   check("dock info uses the structured layout",
     doc.querySelectorAll("#d-info .i-sec").length >= 3 &&
     doc.querySelectorAll("#d-info .i-pill").length >= 2, true);
+  check("dock info names the source network",
+    doc.getElementById("d-info").innerHTML.includes("ONC"), true);
+  check("site shapes: 27 triangles + 16 circles by source",
+    doc.querySelectorAll("#map .leaflet-marker-pane svg polygon").length
+      === 27 &&
+    doc.querySelectorAll("#map .leaflet-marker-pane svg circle").length
+      === 16, true);
   const capTexts = () => Array.from(
     doc.querySelectorAll("#d-chart svg.ichart text"))
     .map(t => t.textContent).join(" | ");
@@ -132,9 +148,8 @@ setTimeout(() => {
   });
   const sw = VI.sites.find(x => x.classes.exposure !== x.classes.worst);
   check("lens switch to worst restyles",
-    doc.querySelectorAll(
-      '#map path[fill="' + VI.colors[sw.classes.worst] + '"]').length > 0,
-    true);
+    doc.querySelectorAll('#map .leaflet-marker-pane [fill="' +
+      VI.colors[sw.classes.worst] + '"]').length > 0, true);
 
   // lens: season via dropdown auto-selects seasonal radio
   const sel = doc.getElementById("season-select");
@@ -143,8 +158,8 @@ setTimeout(() => {
     doc.querySelector("input[name=lens][value=seasonal]").checked, true);
   const sj = VI.sites.find(x => x.classes.jja === "good");
   check("season lens applied (a good-in-JJA site is green)",
-    doc.querySelectorAll(
-      '#map path[fill="' + VI.colors.good + '"]').length > 0 && !!sj, true);
+    doc.querySelectorAll('#map .leaflet-marker-pane [fill="' +
+      VI.colors.good + '"]').length > 0 && !!sj, true);
 
   // legend dropdown + class chips (hide 'good' under JJA lens)
   const lb = doc.getElementById("legend-btn");
@@ -232,6 +247,29 @@ setTimeout(() => {
       doc.querySelectorAll("#map .leaflet-image-layer").length, 0);
   } else console.log("  -- no relief in data.js");
 
+  if (MF) {
+    const sc = doc.getElementById("surface-ctl");
+    check("surface controls revealed by manifest",
+      !sc.classList.contains("hidden"), true);
+    check("surface frame options from manifest",
+      doc.getElementById("surface-frame").options.length,
+      MF.frames.length);
+    const ckS = doc.getElementById("ck-surface");
+    ckS.checked = true; fire(ckS, "change");
+    const simg = () => doc.querySelectorAll(
+      "#map .leaflet-surface-pane img").length;
+    check("surface frame drapes in its own pane (under dots)", simg(), 1);
+    check("first frame src", doc.querySelector(
+      "#map .leaflet-surface-pane img").src.includes(
+      MF.frames[0].png), true);
+    const sel = doc.getElementById("surface-frame");
+    sel.value = "latest.png"; fire(sel, "change");
+    check("frame dropdown swaps the overlay", doc.querySelector(
+      "#map .leaflet-surface-pane img").src.includes("latest.png"), true);
+    ckS.checked = false; fire(ckS, "change");
+    check("surface unchecks clean", simg(), 0);
+  } else console.log("  -- no manifest file (surface controls stay hidden)");
+
   if (VI.bathy) {
     const iso = () => VI.bathy.reduce((n, l) => n +
       doc.querySelectorAll('#map path[stroke="' + l.color + '"]').length, 0);
@@ -241,16 +279,13 @@ setTimeout(() => {
     check("isobaths toggle off", iso(), 0);
   } else console.log("  -- no bathy in data.js");
 
-  if (VI.model) {
-    const m = doc.getElementById("ck-model");
-    m.checked = true; fire(m, "change");
-    check("model diamond markers",
-      doc.querySelectorAll("#map .leaflet-marker-pane svg polygon").length,
-      VI.model.length);
-    check("model series shipped",
-      Object.keys(VI.modelSeries).length, VI.model.length);
+  if (VI.modelSeries) {
+    check("no separate model layer control",
+      doc.getElementById("ck-model"), null);
+    check("model series shipped for all CF stations",
+      Object.keys(VI.modelSeries).length, 27);
     // open a modeled site: chart must show band + dashed line + caption
-    const mc = VI.model[0].key;
+    const mc = Object.keys(VI.modelSeries).sort()[0];
     const si = doc.getElementById("search");
     si.value = mc + " - x"; fire(si, "change");
     check("modeled site chart has uncertainty band",
@@ -268,7 +303,7 @@ setTimeout(() => {
       doc.querySelector("#d-chart .ctip").innerHTML.includes("modeled"),
       true);
     doc.getElementById("d-close").click();
-  } else console.log("  -- no model in data.js " +
+  } else console.log("  -- no modelSeries in data.js " +
     "(add model_predictions.csv to test)");
 
   // search still works
@@ -282,12 +317,40 @@ setTimeout(() => {
     check("site click pans the map near the site",
       Math.abs(A.map.getCenter().lat - s0.lat) < 0.05 &&
       Math.abs(A.map.getCenter().lng - s0.lon) < 0.08, true);
-    check("themed tooltips in use",
-      doc.querySelectorAll("#map .leaflet-tooltip.vi-tt, " +
-        "#map path").length > 0 &&
-      docs_has_vi_tt(), true);
-    console.log(fails ? fails + " FAILURE(S)" : "all checks passed");
-    process.exit(fails ? 1 : 0);
+    check("themed tooltips in use", docs_has_vi_tt(), true);
+    check("DFO casts draw as squares (canvas ext present)",
+      require("fs").readFileSync("docs/assets/app.js", "utf8")
+        .includes("_updateSquareMarker"), true);
+    // cast click pans too
+    A._openCast(0);
+    setTimeout(() => {
+      const c0 = VI.casts[0];
+      check("cast click pans the map near the cast",
+        Math.abs(A.map.getCenter().lat - c0.la) < 0.05 &&
+        Math.abs(A.map.getCenter().lng - c0.lo) < 0.08, true);
+      check("cast dock shows its station's model band",
+        (VI.modelSeries && VI.modelSeries[c0.s])
+          ? doc.querySelector("#d-chart .cmband") !== null : true, true);
+      // fresh page without a manifest: controls must stay hidden
+      const d2 = new JSDOM(html, {runScripts: "outside-only",
+        url: "http://localhost/"});
+      const w2 = d2.window;
+      w2.HTMLElement.prototype.getBoundingClientRect =
+        w.HTMLElement.prototype.getBoundingClientRect;
+      w2.HTMLCanvasElement.prototype.getContext =
+        w.HTMLCanvasElement.prototype.getContext;
+      global.window = w2; global.document = w2.document;
+      w2.L = require("leaflet");
+      w2.eval(fs.readFileSync("docs/assets/data.js", "utf8"));
+      w2.eval(fs.readFileSync("docs/assets/app.js", "utf8"));
+      setTimeout(() => {
+        check("surface controls hidden without a manifest",
+          w2.document.getElementById("surface-ctl")
+            .classList.contains("hidden"), true);
+        console.log(fails ? fails + " FAILURE(S)" : "all checks passed");
+        process.exit(fails ? 1 : 0);
+      }, 200);
+    }, 320);
   }, 320);
   function docs_has_vi_tt() {
     return require("fs").readFileSync("docs/assets/app.js", "utf8")

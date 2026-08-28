@@ -6,7 +6,7 @@
 <title>Vancouver Island near-bottom oxygen</title>
 <link rel="stylesheet"
   href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
-<link rel="stylesheet" href="assets/style.css?v=0a783f6f">
+<link rel="stylesheet" href="assets/style.css?v=7ea19435">
 </head>
 <body>
 <button id="sb-toggle" aria-label="Toggle sidebar">&#9776;</button>
@@ -18,7 +18,7 @@
         title="Light / dark mode">&#9789;</button>
     </div>
     <p class="sub">43 sites &#183; 17612 casts &#183;
-      built 2026-08-28 17:16 UTC</p>
+      built 2026-08-28 17:49 UTC</p>
   </header>
   <section>
     <input id="search" list="site-list" placeholder="Find a site&#8230;"
@@ -65,6 +65,14 @@ chosen three-month season." class="lseason">
     <div class="stack">
       <label title="Hillshaded GEBCO grid drawn over the basemap"><input type="checkbox" id="ck-relief" checked> GEBCO shaded relief</label>
       <label><input type="checkbox" id="ck-bathy" checked> Isobaths (100&#8211;2000 m)</label>
+      <div id="surface-ctl" class="hidden">
+        <label data-tip="Model-predicted near-bottom oxygen draped over
+the map (never observations). Frames come from the model manifest; dots
+always draw on top."><input type="checkbox" id="ck-surface">
+          Modeled surface <span class="hint" tabindex="0"
+          aria-label="What is the modeled surface?">?</span></label>
+        <select id="surface-frame" aria-label="Surface frame"></select>
+      </div>
       <label><input type="checkbox" id="ck-casts" checked>
         CTD casts</label>
       <div id="cast-filters" class="indent">
@@ -90,7 +98,6 @@ statistics; untick to hide them from the map too.">
           </button>
         </div>
       </div>
-      <label><input type="checkbox" id="ck-model"> Modeled predictions</label>
     </div>
   </section>
   <section>
@@ -113,10 +120,11 @@ statistics; untick to hide them from the map too.">
       <div class="lsub2">Click a status to hide or show those points</div>
       <div class="chips"><button class="chip" data-class="good" aria-pressed="true"><span class="sw" style="background:#2f9e44"></span><span class="chip-name">Good</span><span class="chip-rng">&#8805; 2.8 mL/L</span></button><button class="chip" data-class="at_risk" aria-pressed="true"><span class="sw" style="background:#f59f00"></span><span class="chip-name">At risk</span><span class="chip-rng">1.4 &#8211; 2.8</span></button><button class="chip" data-class="hypoxic" aria-pressed="true"><span class="sw" style="background:#e03131"></span><span class="chip-name">Hypoxic</span><span class="chip-rng">0.1 &#8211; 1.4</span></button><button class="chip" data-class="anoxic" aria-pressed="true"><span class="sw" style="background:#5f3dc4"></span><span class="chip-name">Anoxic</span><span class="chip-rng">&lt; 0.1</span></button><button class="chip" data-class="unclassified" aria-pressed="true"><span class="sw" style="background:#868e96"></span><span class="chip-name">Unclassified</span><span class="chip-rng">no data</span></button></div>
       <div class="lhead">What the markers mean</div>
-      <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" stroke="#333" stroke-width="2.5"/></svg><div class="lg-t">Continuous sensor site<div class="lg-sub">records every day</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="5.5" fill="#9db8c9" stroke="#fff" stroke-width="1.6"/></svg><div class="lg-t">Ship-visit station<div class="lg-sub">sampled a few times a year</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="3.2" fill="#9db8c9" stroke="#fff" stroke-width="1"/></svg><div class="lg-t">One CTD cast<div class="lg-sub">colored by its own value</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="3.4" fill="none" stroke="#868e96" stroke-width="1.6"/></svg><div class="lg-t">QC-flagged cast<div class="lg-sub">implausible reading, kept out of stats</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" stroke="#333" stroke-width="2.5" stroke-dasharray="4 3"/></svg><div class="lg-t">Dashed = record ended</div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" opacity=".4" stroke="#333" stroke-width="2"/></svg><div class="lg-t">Faded = lower confidence</div></div>
-      <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><polygon points="13,4 22,13 13,22 4,13" fill="none" stroke="#495057" stroke-width="2.4"/></svg><div class="lg-t">Modeled prediction<div class="lg-sub">hollow diamond &#8212; never an observation</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><line x1="3" y1="13" x2="23" y2="13" stroke="#4292c6" stroke-width="2"/></svg><div class="lg-t">GEBCO isobath<div class="lg-sub">depth contours, 100&#8211;2000 m</div></div></div>
-      <div class="lfoot">Click any marker to open its stats and full time
-        series below the map.</div>
+      <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" stroke="#333" stroke-width="2.5"/></svg><div class="lg-t">ONC cabled sensor site<div class="lg-sub">circle &#183; records every day</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><polygon points="13,3.5 23.5,21.5 2.5,21.5" fill="#9db8c9" stroke="#fff" stroke-width="1.6"/></svg><div class="lg-t">ONC Community Fishers station<div class="lg-sub">triangle &#183; sampled by ship visits</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="3.2" fill="#9db8c9" stroke="#fff" stroke-width="1"/></svg><div class="lg-t">ONC CTD cast<div class="lg-sub">small circle</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><rect x="9.8" y="9.8" width="6.4" height="6.4" fill="#9db8c9" stroke="#fff" stroke-width="1"/></svg><div class="lg-t">DFO CTD cast<div class="lg-sub">small square</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="3.4" fill="none" stroke="#868e96" stroke-width="1.6"/></svg><div class="lg-t">QC-flagged cast<div class="lg-sub">implausible reading, kept out of stats</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" stroke="#333" stroke-width="2.5" stroke-dasharray="4 3"/></svg><div class="lg-t">Dashed outline = record ended</div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="8" fill="#9db8c9" opacity=".4" stroke="#333" stroke-width="2"/></svg><div class="lg-t">Faded = lower confidence</div></div>
+      <div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><rect x="2" y="8" width="22" height="10" fill="#868e96" opacity=".25"/><line x1="2" y1="13" x2="24" y2="13" stroke="#495057" stroke-width="2" stroke-dasharray="4 3"/></svg><div class="lg-t">Model prediction (in charts)<div class="lg-sub">dashed line + grey band &#8212; never an observation</div></div></div><div class="lg-row"><svg class="lg-g" width="26" height="26" viewBox="0 0 26 26"><line x1="3" y1="13" x2="23" y2="13" stroke="#4292c6" stroke-width="2"/></svg><div class="lg-t">GEBCO isobath<div class="lg-sub">depth contours, 100&#8211;2000 m</div></div></div>
+      <div class="lfoot">ONC = Ocean Networks Canada &#183; DFO =
+        Fisheries and Oceans Canada. Click any marker to open its stats
+        and full time series below the map.</div>
     </div>
   </div>
 </main>
@@ -129,7 +137,8 @@ statistics; untick to hide them from the map too.">
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js">
 </script>
-<script src="assets/data.js?v=dc5d0322"></script>
-<script src="assets/app.js?v=ebeb2f4a"></script>
+<script src="assets/model_manifest.js"></script>
+<script src="assets/data.js?v=59402322"></script>
+<script src="assets/app.js?v=553cf793"></script>
 </body>
 </html>

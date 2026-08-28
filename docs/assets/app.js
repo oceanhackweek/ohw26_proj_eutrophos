@@ -305,6 +305,8 @@
     bases.ocean.addTo(map);
 
     map.createPane("relief").style.zIndex = 350;
+    map.createPane("surface").style.zIndex = 360;   // above relief, below
+                                                    // isobaths + cast dots
     var reliefLayer = null;
     if (VI.relief) {
       reliefLayer = L.imageOverlay(VI.relief.url, VI.relief.bounds,
@@ -367,15 +369,25 @@
     // ---- site markers ----
     var siteLayer = L.layerGroup().addTo(map);
     var siteMarkers = {};
+    function siteIcon(s, color) {
+      var op = VI.opacity[s.conf] || 0.6;
+      var ring = s.cont ? "#333333" : "#ffffff";
+      var rw = s.cont ? 2.5 : 1.6;
+      var dash = s.ended ? " stroke-dasharray='4 3'" : "";
+      var body = s.shp === "tri"
+        ? "<polygon points='13,3.5 23.5,21.5 2.5,21.5'"
+        : "<circle cx='13' cy='13' r='9'";
+      return L.divIcon({
+        html: "<svg width='26' height='26' " +
+          "xmlns='http://www.w3.org/2000/svg'>" + body +
+          " fill='" + color + "' fill-opacity='" + op +
+          "' stroke='" + ring + "' stroke-width='" + rw + "'" + dash +
+          "/></svg>",
+        className: "", iconSize: [26, 26], iconAnchor: [13, 13]});
+    }
     VI.sites.forEach(function (s) {
-      var mk = L.circleMarker([s.lat, s.lon], {
-        radius: s.cont ? 9 : 6,
-        color: s.cont ? "#333333" : "#ffffff",
-        weight: s.cont ? 2.5 : 1.5,
-        dashArray: s.ended ? "4" : null,
-        fillOpacity: VI.opacity[s.conf] || 0.6,
-        fill: true
-      });
+      var mk = L.marker([s.lat, s.lon],
+        {icon: siteIcon(s, VI.colors.unclassified), keyboard: false});
       mk.on("click", function () {
         openDetail(s.detail, s.code, s.code, [s.lat, s.lon]);
       });
@@ -388,9 +400,10 @@
       VI.sites.forEach(function (s) {
         var mk = siteMarkers[s.code];
         var c = H.classForLens(s, lens);
-        mk.setStyle({fillColor: VI.colors[c] || VI.colors.unclassified});
+        mk.setIcon(siteIcon(s, VI.colors[c] || VI.colors.unclassified));
         mk.setTooltipContent(
-          "<div class='tt-h'>" + s.name + "</div>" +
+          "<div class='tt-h'>" + s.name +
+          " <span class='tt-b'>" + s.org + "</span></div>" +
           "<div class='tt-r'><span class='tt-dot' style='background:" +
           (VI.colors[c] || VI.colors.unclassified) + "'></span>" +
           (VI.labels[c] || "no data") +
@@ -407,8 +420,25 @@
     var castLayer = L.layerGroup().addTo(map);
     var castOn = true;
     var castCanvas = L.canvas({padding: 0.4});
+    // DFO casts render as small squares on the shared canvas
+    L.Canvas.include({
+      _updateSquareMarker: function (layer) {
+        if (!this._drawing || layer._empty()) return;
+        var p = layer._point, ctx = this._ctx,
+            r = Math.max(Math.round(layer._radius), 1);
+        ctx.beginPath();
+        ctx.rect(p.x - r, p.y - r, r * 2, r * 2);
+        this._fillStroke(ctx, layer);
+      }
+    });
+    var SquareMarker = L.CircleMarker.extend({
+      _updatePath: function () {
+        this._renderer._updateSquareMarker(this);
+      }
+    });
     var castMarkers = VI.casts.map(function (c) {
-      var mk = L.circleMarker([c.la, c.lo], c.q
+      var Ctor = c.f ? SquareMarker : L.circleMarker;
+      var mk = new (c.f ? SquareMarker : L.CircleMarker)([c.la, c.lo], c.q
         ? {radius: 3, color: "#868e96", weight: 1.4, fill: false,
            renderer: castCanvas}
         : {radius: 3, color: "#ffffff", weight: 0.8, fill: true,
@@ -416,7 +446,7 @@
            renderer: castCanvas});
       mk.bindTooltip(
         "<div class='tt-h'>" + c.s +
-        (c.f ? " <span class='tt-b'>DFO</span>" : "") +
+        " <span class='tt-b'>" + (c.f ? "DFO" : "ONC") + "</span>" +
         (c.q ? " <span class='tt-b'>QC</span>" : "") + "</div>" +
         "<div class='tt-r'><span class='tt-dot' style='background:" +
         (c.q ? "#868e96" : VI.colors[c.c]) + "'></span><b>" +
@@ -424,9 +454,15 @@
         VI.labels[c.c] + "</span></div>" +
         "<div class='tt-r tt-mut'>" + c.t.slice(0, 10) + "</div>",
         {sticky: true, className: "vi-tt"});
-      mk.on("click", function () { openDetail(castHtml(c), c.s); });
+      mk.on("click", function () {
+        openDetail(castHtml(c), c.s, undefined, [c.la, c.lo]);
+      });
       return mk;
     });
+    H._openCast = function (i) {
+      var c = VI.casts[i];
+      openDetail(castHtml(c), c.s, undefined, [c.la, c.lo]);
+    };
     function castHtml(c) {
       var h = "<div class='i-h'>" + c.s + "</div>" +
         "<div class='i-subh'>single CTD cast \u00b7 " +
@@ -473,22 +509,35 @@
       })).addTo(map);
     }
 
-    // ---- modeled ----
-    var modelLayer = null;
-    if (VI.model) {
-      modelLayer = L.layerGroup(VI.model.map(function (p) {
-        var sz = p.small ? 14 : 18, h = sz / 2;
-        var svg = "<svg width='" + sz + "' height='" + sz + "' xmlns='" +
-          "http://www.w3.org/2000/svg'><polygon points='" + h + ",1.5 " +
-          (sz - 1.5) + "," + h + " " + h + "," + (sz - 1.5) + " 1.5," + h +
-          "' fill='rgba(255,255,255,.55)' stroke='" + VI.colors[p.cls] +
-          "' stroke-width='2.6'/></svg>";
-        var mk = L.marker([p.lat, p.lon], {icon: L.divIcon({html: svg,
-          className: "", iconSize: [sz, sz], iconAnchor: [h, h]})});
-        mk.bindTooltip(p.tip, {sticky: true});
-        mk.on("click", function () { openDetail(p.detail, p.key); });
-        return mk;
-      }));
+    // ---- modeled surface (imageOverlay frames from MODEL_MANIFEST) ----
+    var surfaceLayer = null;
+    var surfaceSel = document.getElementById("surface-frame");
+    var surfaceCtl = document.getElementById("surface-ctl");
+    if (typeof MODEL_MANIFEST !== "undefined" && surfaceSel &&
+        MODEL_MANIFEST.frames && MODEL_MANIFEST.frames.length) {
+      surfaceCtl.classList.remove("hidden");
+      MODEL_MANIFEST.frames.forEach(function (f) {
+        var o = document.createElement("option");
+        o.value = f.png;
+        o.textContent = f.label;
+        surfaceSel.appendChild(o);
+      });
+      var showSurface = function () {
+        if (surfaceLayer) map.removeLayer(surfaceLayer);
+        surfaceLayer = L.imageOverlay("model_grid/" + surfaceSel.value,
+          MODEL_MANIFEST.bounds,
+          {pane: "surface", opacity: 0.85,
+           attribution: "Modeled \u00b7 " + MODEL_MANIFEST.model_version});
+        surfaceLayer.addTo(map);
+      };
+      var ckS = document.getElementById("ck-surface");
+      ckS.addEventListener("change", function (e) {
+        if (e.target.checked) showSurface();
+        else if (surfaceLayer) map.removeLayer(surfaceLayer);
+      });
+      surfaceSel.addEventListener("change", function () {
+        if (ckS.checked) showSurface();
+      });
     }
 
     // ---- fit-to-data ----
@@ -606,12 +655,6 @@
       function (e) {
         if (e.target.checked) bathyLayer.addTo(map);
         else map.removeLayer(bathyLayer);
-      });
-    var ckModel = document.getElementById("ck-model");
-    if (ckModel && modelLayer) ckModel.addEventListener("change",
-      function (e) {
-        if (e.target.checked) modelLayer.addTo(map);
-        else map.removeLayer(modelLayer);
       });
 
     // ---- theme toggle ----

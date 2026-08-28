@@ -38,7 +38,8 @@ import pandas as pd
 
 DERIVED = Path("data/derived")
 OUT_DIR = Path("model_grid")
-MODEL_VERSION = "hgb_quantile_v1"
+MODEL_VERSION = "hgb_quantile_v1.1"
+BAND_SCALE = 1.55        # held-out calibration; keep in sync with the trainer
 GRID_STRIDE = 2          # GEBCO 15" x2 = ~0.9 km cells
 MIN_WATER_M = 5.0        # cells shallower than this are masked
 FADE_FULL_KM, FADE_ZERO_KM = 15.0, 40.0
@@ -217,7 +218,10 @@ def main() -> int:
         med = models["med"].predict(X[x_cols]).clip(0, 11)
         lo = models["lo"].predict(X[x_cols]).clip(0, 11)
         hi = models["hi"].predict(X[x_cols]).clip(0, 11)
-        width = np.abs(hi - lo)
+        l, h = np.minimum(lo, hi), np.maximum(lo, hi)
+        lo = np.clip(med - BAND_SCALE * (med - l), 0, None)
+        hi = med + BAND_SCALE * (h - med)
+        width = hi - lo
 
         V = np.full(LAT.shape, np.nan)
         V[water] = med
