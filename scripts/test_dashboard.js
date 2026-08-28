@@ -20,6 +20,14 @@ w.HTMLElement.prototype.getBoundingClientRect = function () {
   return { x: 0, y: 0, top: 0, left: 0, width: 1200, height: 800,
     right: 1200, bottom: 800 };
 };
+// jsdom lacks canvas: give Leaflet's canvas renderer a permissive no-op 2D
+// context (any method call is a no-op, any property is settable)
+w.HTMLCanvasElement.prototype.getContext = function () {
+  return new Proxy({}, {
+    get: (t, k) => (k in t ? t[k] : function () {}),
+    set: (t, k, v) => { t[k] = v; return true; }
+  });
+};
 global.window = w; global.document = w.document;
 Object.defineProperty(global, "navigator",
   { value: w.navigator, configurable: true });
@@ -34,23 +42,45 @@ setTimeout(() => {
   const doc = w.document, VI = w.VI, A = w.VIAPP;
   const ALL = ["good", "at_risk", "hypoxic", "anoxic", "unclassified"];
   const CONFS = ["high", "medium", "low"];
-  const nIso = VI.bathy ? VI.bathy.length : 0;
-  const marks = () =>
-    doc.querySelectorAll("#map path.leaflet-interactive").length - nIso;
+  const counts = () => A.counts();
   const fire = (el, type) =>
     el.dispatchEvent(new w.Event(type, { bubbles: true }));
 
-  check("site markers on boot", marks(), VI.sites.length);
+  check("site markers on boot", counts().sites, VI.sites.length);
+  check("cast years start at DFO era", VI.meta.cast_years[0], 2006);
   check("deep link opens detail dock",
     !doc.getElementById("detail").classList.contains("hidden"), true);
   check("dock resizes map (body.detail-open)",
     doc.body.classList.contains("detail-open"), true);
-  check("dock chart pane holds the SVG",
-    doc.getElementById("d-chart").innerHTML.trim().startsWith("<svg"), true);
+  check("dock renders interactive chart",
+    doc.querySelector("#d-chart svg.ichart") !== null, true);
   check("dock info pane has the stats table",
     doc.getElementById("d-info").querySelector("table") !== null, true);
   check("chart slot removed from info pane",
     doc.getElementById("d-info").querySelector("[data-chart]"), null);
+  // hover readout
+  let cap = doc.querySelector('#d-chart svg.ichart rect[fill="transparent"]');
+  cap.dispatchEvent(new w.MouseEvent("mousemove",
+    {clientX: 600, clientY: 200, bubbles: true}));
+  const tipEl = doc.querySelector("#d-chart .ctip");
+  check("hover shows a value readout",
+    !tipEl.classList.contains("hidden") &&
+    tipEl.innerHTML.includes("mL/L"), true);
+  // drag-zoom
+  const fullSpan = A.chart.getFull()[1] - A.chart.getFull()[0];
+  cap.dispatchEvent(new w.MouseEvent("mousedown",
+    {clientX: 400, clientY: 200, bubbles: true}));
+  cap.dispatchEvent(new w.MouseEvent("mousemove",
+    {clientX: 700, clientY: 200, bubbles: true}));
+  cap.dispatchEvent(new w.MouseEvent("mouseup",
+    {clientX: 700, clientY: 200, bubbles: true}));
+  const zoomSpan = A.chart.getDomain()[1] - A.chart.getDomain()[0];
+  check("drag zooms the chart", zoomSpan < fullSpan * 0.6, true);
+  cap = doc.querySelector('#d-chart svg.ichart rect[fill="transparent"]');
+  cap.dispatchEvent(new w.MouseEvent("dblclick", {bubbles: true}));
+  check("double-click resets zoom",
+    Math.round(A.chart.getDomain()[1] - A.chart.getDomain()[0]),
+    Math.round(fullSpan));
   doc.getElementById("d-close").click();
   check("close clears detail-open",
     doc.body.classList.contains("detail-open"), false);
@@ -93,36 +123,37 @@ setTimeout(() => {
   const nGoodJJA = VI.sites.filter(s =>
     A.siteVisible(s, "jja", CONFS, ALL) &&
     (s.classes.jja || "unclassified") === "good").length;
-  const before = marks();
+  const before = counts().sites;
   doc.querySelector('.chip[data-class="good"]').click();
-  check("chip hides good-class sites", before - marks(), nGoodJJA);
+  check("chip hides good-class sites", before - counts().sites, nGoodJJA);
   doc.querySelector('.chip[data-class="good"]').click();   // restore
-  check("chip restores them", marks(), before);
+  check("chip restores them", counts().sites, before);
 
   // confidence filter under current lens
   doc.querySelectorAll("input[name=conf]").forEach(el => {
     if (el.value !== "high") { el.checked = false; fire(el, "change"); }
   });
-  check("confidence filter", marks(),
+  check("confidence filter", counts().sites,
     VI.sites.filter(s => A.siteVisible(s, "jja", ["high"], ALL)).length);
   doc.querySelectorAll("input[name=conf]").forEach(el => {
     el.checked = true; fire(el, "change");
   });
 
   // casts + year/suspect/class filters
-  const nSites = marks();
   const ck = doc.getElementById("ck-casts");
   ck.checked = true; fire(ck, "change");
-  check("cast layer", marks() - nSites, VI.casts.length);
+  check("cast layer (ONC + DFO)", counts().casts, VI.casts.length);
+  check("DFO casts present",
+    VI.casts.filter(c => c.f).length > 10000, true);
   doc.getElementById("yr0").value = String(VI.meta.cast_years[1]);
   fire(doc.getElementById("yr0"), "input");
   const f1 = { y0: VI.meta.cast_years[1], y1: VI.meta.cast_years[1],
     suspect: true };
-  check("year filter", marks() - nSites,
+  check("year filter", counts().casts,
     VI.casts.filter(c => A.castVisible(c, f1, ALL)).length);
   const sus = doc.getElementById("ck-suspect");
   sus.checked = false; fire(sus, "change");
-  check("suspect filter", marks() - nSites,
+  check("suspect filter", counts().casts,
     VI.casts.filter(c => A.castVisible(c, { ...f1, suspect: false }, ALL))
       .length);
 
