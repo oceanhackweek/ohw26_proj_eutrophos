@@ -18,4 +18,4 @@ contributor_folders/*/data/onc_cache/
 # Python
 __pycache__/
 *.pyc
-node_modules/
+node_modules/data/derived/model_predictions.csv
