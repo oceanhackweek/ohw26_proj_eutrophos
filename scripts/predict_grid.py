@@ -37,10 +37,10 @@ import numpy as np
 import pandas as pd
 
 DERIVED = Path("data/derived")
-OUT_DIR = Path("model_grid")
+OUT_DIR = Path("docs/model_grid")
 MODEL_VERSION = "hgb_quantile_v1.1"
 BAND_SCALE = 1.55        # held-out calibration; keep in sync with the trainer
-GRID_STRIDE = 2          # GEBCO 15" x2 = ~0.9 km cells
+GRID_STRIDE = 1          # full GEBCO 15" (~450 m) - crisp coastlines
 MIN_WATER_M = 5.0        # cells shallower than this are masked
 FADE_FULL_KM, FADE_ZERO_KM = 15.0, 40.0
 VMAX = 7.0               # colormap ceiling, mL/L
@@ -238,7 +238,7 @@ def main() -> int:
         ax.axis("off")
         ax.imshow(rgba, origin="lower",
                   extent=[lon.min(), lon.max(), lat.min(), lat.max()],
-                  interpolation="bilinear", aspect="auto")
+                  interpolation="nearest", aspect="auto")
         ax.contour(LON, LAT, np.ma.masked_invalid(V), levels=[1.4, 2.8],
                    colors="#00000059", linewidths=0.7)
         ax.set_xlim(lon.min(), lon.max())
