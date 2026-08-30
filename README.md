@@ -129,8 +129,8 @@ everything is cached and resumable.
 ## References
 
 Full source citations, licences, and required acknowledgments:
-[`DATA_SOURCES.md`](DATA_SOURCES.md). Scientific basis, critique by
-critique: [`LITERATURE.md`](LITERATURE.md). Cite this repository:
-[`CITATION.cff`](CITATION.cff).
+[`DATA_SOURCES.md`](DATA_SOURCES.md).
 
 Contains modified Copernicus Climate Change Service information (2026).
+
+To cite: "OHW26 eutrophos team (2026), VI Near-Bottom O₂, github.com/oceanhackweek/ohw26_proj_eutrophos"
