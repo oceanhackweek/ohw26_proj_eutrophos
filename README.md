@@ -1,27 +1,21 @@
-# Vancouver Island Near-Bottom Oxygen
+# ohw26_proj_eutrophos
 
-Live dashboard: https://oceanhackweek.org/ohw26_proj_eutrophos/
+This is the project repository from OceanHackWeek 2026 (Bamfield, BC).
 
-Mapping, classifying, and modeling near-bottom dissolved oxygen around Vancouver Island, BC.
-This is built at OceanHackWeek 2026 (Bamfield Marine Sciences Centre).
-
-**Folder Structure**
-
-* `contributor_folders` (optional) Each contributor can make a folder here and 
-push their work here during the week. This will allow everyone to see each others work but prevent any merge conflicts. It is good if participants are new to collaborative coding.
-* `final_notebooks` When the team develops shared final notebooks, they 
-can be shared here. Make sure to communicate so that you limit merge conflicts.
-* `scripts` Shared scripts or functions can be added here.
-* `data` Shared dataset can be shared here. Large regenerables (raw archives, hourly ERA5, fetch caches) are gitignored; see the Datasets table for what ships in-repo.
-preserve relative paths, but the dataset does not need to be added to git/GitHub (you can use `.gitignore`).
-
-You can start with a simple structure and as you progress you can refine it to contain more components. [Here](https://cookiecutter-data-science.drivendata.org/#directory-structure) is an example of a more elaborate structure for a data science project.
+* `README.md` — this file, the project overview.
+* `contributor_folders` — personal working folders; the project's development history.
+* `data` — shared datasets. Large regenerables (raw archives, hourly ERA5, fetch caches) are gitignored; see the Datasets table for what ships in-repo.
+* `final_notebooks` — polished, re-runnable notebooks that reproduce the headline claims.
+* `scripts` — the pipeline: fetch → derive → classify → model → bake the dashboard.
+* `docs` — the dashboard itself (GitHub Pages serves this folder).
 
 ## Project Name and one-line description
 
-EUTROPHOS - Evaluation of Coastal Eutrophication precursors : Mapping oxygen levels around Vancouver Island
+**VI Near-Bottom O₂** — mapping, classifying, and modeling near-bottom
+dissolved oxygen around Vancouver Island, with every claim reproducible
+from this repository.
 
-Mapping, classifying, and modeling near-bottom dissolved oxygen around Vancouver Island, BC.
+**Live dashboard:** https://oceanhackweek.org/ohw26_proj_eutrophos/
 
 ## Collaborators
 
@@ -31,52 +25,48 @@ Mapping, classifying, and modeling near-bottom dissolved oxygen around Vancouver
 | Ashmeet Singh       | Prospective PHD Student     |
 | Ejay Aguirre        | Undergraduate Student in DS |
 
-
 ## Planning
 
-* Initial idea: "Map where and when near-bottom oxygen around Vancouver
-  Island falls to at-risk, hypoxic, or anoxic levels, using only open
-  data, then make it explorable by anyone in a browser."
-* Final presentation: https://docs.google.com/presentation/d/1w_wfZXWYwS6Kx_Zjpd_JW6HHjlVOeE2qxacQUV-vH5w/edit?usp=sharing
+* Initial idea: map oxygen status around Vancouver Island from every source
+  we could reach, then use a model to fill the space between measurements.
+* Working notebooks: [`final_notebooks/`](final_notebooks/) (01 → 03).
+* Dashboard build and deployment notes: [`DASHBOARD.md`](DASHBOARD.md).
 
 ## Background
-Dissolved oxygen near the seafloor controls habitat quality for
-groundfish, crab, and prawn. Around Vancouver Island, low-oxygen water
-has two faces: the natural NE Pacific oxygen-minimum zone touching the
-shelf and canyons (e.g. Barkley Canyon), and seasonal deoxygenation in
-inlets and straits (e.g. Saanich Inlet). 
-Observations exist — cabled sensors, government CTD surveys, community science casts;
-however, they are scattered across portals, formats, and sampling styles. 
-We classify every
-observing site with common thresholds, in mL/L: 
-**< 0.1 anoxic**, **< 1.4 hypoxic**, **< 2.8 at risk**, **≥ 2.8 good**.
+
+Near-bottom oxygen around Vancouver Island is set by a mix of natural
+deep-Pacific (oxygen-minimum-zone) water, wind-driven upwelling on the
+outer shelf, and stratification and renewal cycles in the inside waters
+and fjords. Some basins (Saanich Inlet, Alberni Inlet, Barkley Canyon)
+are naturally hypoxic or anoxic for much of the year; others flirt with
+thresholds seasonally. We wanted one map that shows the observed status
+honestly — and a model that extends it, with its uncertainty on display.
 
 ## Goals
 
-1. One map that answers "how low does oxygen get here?" under several
-   lenses: typical low (10th percentile), worst case (record minimum),
-   and each season.
-2. Fuse daily sensors with sparse casts without hiding their differences
-   — marker shapes encode source, badges name the provider, opacity
-   encodes confidence.
-3. Add a machine-learning model with *calibrated* uncertainty (station
-   bands + a gridded surface), kept visually unmistakable from
-   observations everywhere.
-4. Ship it all as a free, static, reproducible website.
+1. Assemble every reachable near-bottom O₂ record (DFO, ONC, Community
+   Fishers, OOI) into one consistent, mL/L, near-bottom dataset.
+2. Classify every site under three lenses (typical low / worst case /
+   seasonal) with confidence grades.
+3. Train and honestly validate a model predicting O₂ from weather, river
+   flow, depth, and season — with calibrated uncertainty.
+4. Ship it all as a fetch-free static dashboard anyone can open.
 
 ## Datasets
 
-| File (`data/derived/`) | Source | Licence / terms |
+| Dataset | Source | Licence / note |
 |---|---|---|
-| `site_classification.csv`, `site_daily.csv` | Ocean Networks Canada cabled observatories & moorings | ONC data policy (attribution) |
-| `cf_casts.csv` | ONC **Community Fishers** CTD program | ONC data policy |
-| `dfo_casts.csv`, `dfo_moorings_daily.csv` | Fisheries & Oceans Canada (IOS CTD archive, moorings) | Open Government Licence – Canada |
-| `gebco_2026_*.nc` | GEBCO 2026 Grid (15 arc-sec bathymetry) | Public domain |
+| `dfo_casts.csv` (17,399 casts) | DFO IOS via CIOOS Pacific ERDDAP | OGL-Canada |
+| `cf_casts.csv` (846 casts) | ONC Community Fishers | ONC data policy |
+| `site_daily.csv` (16 cabled sites) | Ocean Networks Canada | ONC data policy |
+| `dfo_moorings_daily.csv` (21 clusters) | DFO BC Shelf Mooring Program via CIOOS | OGL-Canada |
+| `ooi_oxygen_daily.csv` (WA line; training only) | NSF OOI Data Explorer | OOI policy |
+| `bc_lighthouses_daily.csv` (1914–2019) | DFO BCSOP via CIOOS | OGL-Canada |
+| GEBCO 2026 grid subset (`.nc`) | GEBCO/BODC | public domain |
 | `training_table.csv` + `forcing_features_daily.csv` | this repo (committed) | MIT; the model retrains from these alone |
 | `model_predictions.csv` | regenerated locally by `scripts/train_oxygen_model.py` | not committed (~50 MB); bands ship baked in `data.js` |
 
-Basemap tiles © Esri, served with required attribution. Profiled but not
-displayed: OOI Endurance (outside the study box), BC lighthouses (no O₂).
+Full citations, licences, and required acknowledgments: [`DATA_SOURCES.md`](DATA_SOURCES.md).
 
 ## Workflow/Roadmap
 
@@ -95,51 +85,52 @@ scripts/build_dashboard.py  ──▶  docs/   (baked, fetch-free static site)
 GitHub Pages serves docs/ on every push to main.
 ```
 
-Reproduce everything:
+## Reproduce this work
 
 ```bash
 pip install -r requirements.txt
-python scripts/build_dashboard.py # rebake the site from data
-npm i jsdom leaflet && node scripts/test_dashboard.js
-jupyter lab final_notebooks/ # run 01 → 02 → 03
+python scripts/build_training_table.py     # or skip: table is committed
+python scripts/train_oxygen_model.py       # exams + station bands (~3 min)
+python scripts/predict_grid.py             # modeled surface frames (~3 min)
+python scripts/build_dashboard.py          # bake the site
+python -m http.server -d docs 8000         # open localhost:8000
 ```
 
-Roadmap beyond the hackweek: fold the 21 DFO moorings in as classified
-site markers, decide on extending the study box south (OOI / Puget
-Sound), and use the per-row model `confidence` columns in the UI.
+Refreshing the *observations* additionally needs credentials (ONC token as
+`ONC_TOKEN`, Copernicus `~/.cdsapirc`) and the `scripts/fetch_*.py` chain —
+everything is cached and resumable.
 
 ## Results/Findings
 
-* **The dashboard** — 43 classified sites, 17,612 CTD casts (ONC + DFO),
-  GEBCO relief/isobaths, model bands at **620 stations**, and a 5-frame
-  modeled oxygen surface: <https://oceanhackweek.org/ohw26_proj_eutrophos/>
-  (deep links work, e.g. `…/#SEVIP`).
-* **Model skill (station-blocked validation):** typical error **0.46 mL/L**, correct  4-class status **80%** at never-seen stations, vs **1.08 mL/L** for a region×month climatology; prediction bands calibrated (×1.55) to 80% held-out coverage.
-* **Classification is fully reproducible**: notebook 02 recomputes every
-  site's status from raw inputs with the same functions the build uses —
-  **43/43 agreement** on both the typical-low and worst-case lenses.
-* **Saanich Inlet 2024**: 14 days below 0.1 mL/L (anoxic) at SEVIP.
-* **Barkley Canyon (BACAX, 983 m)** sits in persistent OMZ hypoxia —
-  100% of its record below 1.4 mL/L — reflecting offshore water masses,
-  not local deterioration.
-* **The model's 80% band holds up**: notebook 03 checks 9,656 real casts
-  against the calibrated band — **87.8% fall inside** (high-confidence
-  stations: 80.0%, on target; medium 90.7%; low 91.4%). In-sample
-  diagnostic, stated as such.
+* An interactive dashboard: 43 classified sites, ~17.6k individual casts,
+  GEBCO relief/isobaths, model bands at **656 stations**, and a 5-frame
+  modeled surface with confidence shown as transparency.
+* **Model skill (station-blocked validation):** typical error
+  **0.46 mL/L**, correct 4-class status **80%** at never-seen stations, vs
+  **1.08 mL/L** for a region×month climatology; prediction bands
+  calibrated (×1.55) to 80% held-out coverage.
+* **43/43 sites** reproduce their published classification from the raw
+  committed data (`final_notebooks/02`).
+* The dashboard's numbers are verified in committed notebooks and a
+  92-check headless UI suite — not slides.
+* **SEVIP anoxia:** the Saanich sill sensor logged 14 days at or below
+  0.1 mL/L in fall 2024 — surfaced by the classification, visible on the
+  dashboard, reproduced in `final_notebooks/02`.
 
 ## Lessons Learned
 
-* Bake, don't fetch: one static `data.js` made hosting free and reviews
-  trivial; Pages gzip absorbs the payload cost.
-* Encode provenance visually (shapes + badges) before anyone has to ask
-  "whose data is this?".
-* Modeled vs observed must be unconfusable *everywhere*: dashed lines,
-  bands, hollow markers, and the word "modeled" in every tooltip.
-* Calibrate, then verify: widened quantile bands only became credible
-  once a notebook measured their real coverage.
+* Bake, don't fetch: a static `data.js` outlives every API hiccup.
 * Verify claims in committed notebooks, not slides.
+* A fetch box is a hard wall — empty map regions can mean "never asked."
+* Same filename ≠ same file: print provenance (row/station counts) at
+  every pipeline stage.
+* Show model uncertainty as transparency; fade to nothing far from data.
 
 ## References
 
-Full source citations, licences, and required acknowledgments: [DATA_SOURCES.md](DATA_SOURCES.md).
+Full source citations, licences, and required acknowledgments:
+[`DATA_SOURCES.md`](DATA_SOURCES.md). Scientific basis, critique by
+critique: [`LITERATURE.md`](LITERATURE.md). Cite this repository:
+[`CITATION.cff`](CITATION.cff).
+
 Contains modified Copernicus Climate Change Service information (2026).

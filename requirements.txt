@@ -1,5 +1,15 @@
+# Dashboard
 folium>=0.20
 pandas>=2.0
 numpy
-matplotlib      # bathymetry contours (optional layer)
-netCDF4         # GEBCO .nc reading (optional layer)
+matplotlib      # bathymetry contours, surface frames
+netCDF4         # GEBCO .nc reading
+
+# Pipeline + model
+requests>=2.31
+scikit-learn>=1.3
+scipy>=1.11
+
+# Data acquisition (credentials required)
+onc>=2.3        # ONC Oceans 3.0 client (env var ONC_TOKEN)
+cdsapi>=0.7     # Copernicus CDS (~/.cdsapirc)
