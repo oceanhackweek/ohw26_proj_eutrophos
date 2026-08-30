@@ -97,7 +97,7 @@ GitHub Pages serves docs/ on every push to main.
 Reproduce everything:
 
 ```bash
-conda env create -f environment.yml && conda activate ohw26-eutrophos
+pip install -r requirements.txt
 python scripts/build_dashboard.py # rebake the site from data
 npm i jsdom leaflet && node scripts/test_dashboard.js
 jupyter lab final_notebooks/ # run 01 → 02 → 03
