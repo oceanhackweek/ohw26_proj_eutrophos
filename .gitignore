@@ -1,21 +1,28 @@
-.ipynb_checkpoints
-
-# Secrets / credentials — never commit these
+# --- Secrets / credentials — never commit these
 .env
 *.env
 .onc_token
 *token*.txt
 *_secret*
 
-# Large long-format exports exceed GitHub's 100 MB file limit --
-# regenerate them with onc_folger.py instead of committing.
-contributor_folders/*/data/*_long.csv
-
-# Downloaded / cached ONC data
-contributor_folders/*/data/onc_cache/
+# --- Large regenerables (rebuild via scripts/, don't commit)
+data/era5/
+data/*_cache/
+data/raw/
+data/derived/model_predictions.csv
 *.parquet
+/model_grid/
 
-# Python
+# --- Legacy contributor-folder locations (history, pre-migration)
+contributor_folders/*/data/*_long.csv
+contributor_folders/*/data/onc_cache/
+
+# --- Python
 __pycache__/
 *.pyc
-node_modules/data/derived/model_predictions.csv
+.ipynb_checkpoints
+.venv/
+
+# --- Tooling / OS
+node_modules/
+.DS_Store
