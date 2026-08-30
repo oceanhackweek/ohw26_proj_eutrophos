@@ -12,8 +12,7 @@ push their work here during the week. This will allow everyone to see each other
 * `final_notebooks` When the team develops shared final notebooks, they 
 can be shared here. Make sure to communicate so that you limit merge conflicts.
 * `scripts` Shared scripts or functions can be added here.
-* `data` Shared dataset can be shared here. Note, do not put large datasets on GitHub. Speak to the organizers if you 
-need to share large datasets. Each team member can have a version of the dataset locally in the same folder to 
+* `data` Shared dataset can be shared here. Large regenerables (raw archives, hourly ERA5, fetch caches) are gitignored; see the Datasets table for what ships in-repo.
 preserve relative paths, but the dataset does not need to be added to git/GitHub (you can use `.gitignore`).
 
 You can start with a simple structure and as you progress you can refine it to contain more components. [Here](https://cookiecutter-data-science.drivendata.org/#directory-structure) is an example of a more elaborate structure for a data science project.
@@ -73,7 +72,8 @@ observing site with common thresholds, in mL/L:
 | `cf_casts.csv` | ONC **Community Fishers** CTD program | ONC data policy |
 | `dfo_casts.csv`, `dfo_moorings_daily.csv` | Fisheries & Oceans Canada (IOS CTD archive, moorings) | Open Government Licence – Canada |
 | `gebco_2026_*.nc` | GEBCO 2026 Grid (15 arc-sec bathymetry) | Public domain |
-| `model_predictions.csv` | this repo — `scripts/train_oxygen_model.py` | MIT; ~50 MB, regenerable |
+| `training_table.csv` + `forcing_features_daily.csv` | this repo (committed) | MIT; the model retrains from these alone |
+| `model_predictions.csv` | regenerated locally by `scripts/train_oxygen_model.py` | not committed (~50 MB); bands ship baked in `data.js` |
 
 Basemap tiles © Esri, served with required attribution. Profiled but not
 displayed: OOI Endurance (outside the study box), BC lighthouses (no O₂).
@@ -83,8 +83,9 @@ displayed: OOI Endurance (outside the study box), BC lighthouses (no O₂).
 ```
 data/derived/*.csv + GEBCO .nc
         │
-        ├── scripts/train_oxygen_model.py ──▶ model_predictions.csv
-        │                                      + docs/model_grid/ frames
+        ├── scripts/build_training_table.py ──▶ training_table.csv
+        ├── scripts/train_oxygen_model.py ──▶ model_predictions.csv (bands)
+        ├── scripts/predict_grid.py ──────▶ docs/model_grid/ frames
         ▼
 scripts/build_dashboard.py  ──▶  docs/   (baked, fetch-free static site)
         │                          ▲
@@ -113,6 +114,7 @@ Sound), and use the per-row model `confidence` columns in the UI.
   GEBCO relief/isobaths, model bands at **620 stations**, and a 5-frame
   modeled oxygen surface: <https://oceanhackweek.org/ohw26_proj_eutrophos/>
   (deep links work, e.g. `…/#SEVIP`).
+* **Model skill (station-blocked validation):** typical error **0.46 mL/L**, correct  4-class status **80%** at never-seen stations, vs **1.08 mL/L** for a region×month climatology; prediction bands calibrated (×1.55) to 80% held-out coverage.
 * **Classification is fully reproducible**: notebook 02 recomputes every
   site's status from raw inputs with the same functions the build uses —
   **43/43 agreement** on both the typical-low and worst-case lenses.
@@ -139,7 +141,5 @@ Sound), and use the per-row model `confidence` columns in the UI.
 
 ## References
 
-* GEBCO Compilation Group (2026). *GEBCO 2026 Grid.*
-* Ocean Networks Canada — Oceans 3.0 data portal & Community Fishers. 
-* Fisheries & Oceans Canada — Institute of Ocean Sciences data archive.
-* OceanHackWeek 2026, Bamfield Marine Sciences Centre.
+Full source citations, licences, and required acknowledgments: [DATA_SOURCES.md](DATA_SOURCES.md).
+Contains modified Copernicus Climate Change Service information (2026).
